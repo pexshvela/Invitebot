@@ -6,8 +6,7 @@ import os
 import logging
 from datetime import timedelta
 
-import telegram  # ← added for version debug
-
+import telegram  # ← for version debug
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -18,6 +17,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+import telegram.error  # ← NEW: for specific BadRequest handling
 
 import sheets
 from config import PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME, get_channel
@@ -194,6 +194,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channel_id = get_channel(lang)
 
+    # ── DEBUG LOGS (you will see these in Railway logs) ─────────────────────
+    logger.info(f"🔍 Creating invite link → channel_id={channel_id} | user={user_id} | lang={lang}")
+    # ───────────────────────────────────────────────────────────────────────
+
     try:
         invite = await context.bot.create_chat_invite_link(
             chat_id=channel_id,
@@ -212,7 +216,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         msg = fmt(get_msg(lang, "invite_instruction"), first_name=first_name, link=link_url)
         await update.message.reply_text(msg, parse_mode="Markdown")
-        logger.info(f"Link created for {username} ({user_id}) lang={lang}")
+        logger.info(f"✅ Link created for {username} ({user_id}) lang={lang}")
 
         context.job_queue.run_once(
             send_inactivity_warning,
@@ -227,11 +231,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name=f"warn_{user_id}",
         )
 
+    except telegram.error.BadRequest as e:
+        if "chat not found" in str(e).lower():
+            await update.message.reply_text(
+                "❌ I can't create an invite link right now.\n"
+                "Please make sure the bot is **admin** in the channel with the permission "
+                "**'Invite users via link'** enabled.\n"
+                "Also check that the channel ID in `config.py` is correct."
+            )
+            logger.error(f"❌ Chat not found for channel_id={channel_id} (user={user_id})")
+        else:
+            await update.message.reply_text("❌ Something went wrong. Please try again.")
+            logger.error(f"BadRequest creating link: {e}")
     except Exception as e:
-        logger.error(f"Error creating link for {user_id}: {e}")
-        await update.message.reply_text(
-            "❌ Something went wrong. Please try again in a moment."
-        )
+        logger.error(f"Unexpected error creating link for {user_id}: {e}")
+        await update.message.reply_text("❌ Something went wrong. Please try again in a moment.")
 
 
 # ─── /status ─────────────────────────────────────────────────────────────────
@@ -361,7 +375,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     logger.info("Starting bot...")
-    logger.info(f"📦 Using python-telegram-bot version: {telegram.__version__}")   # ← debug line
+    logger.info(f"📦 Using python-telegram-bot version: {telegram.__version__}")
 
     try:
         sheets.setup_sheets()
