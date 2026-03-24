@@ -365,6 +365,8 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     logger.info("Starting bot...")
+
+    # Setup Google Sheets
     try:
         sheets.setup_sheets()
         logger.info("Google Sheets ready.")
@@ -372,19 +374,24 @@ def main():
         logger.error(f"Sheets init failed: {e}")
         raise
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    # Build modern v20+ Application (no Updater!)
+    application = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("claim", claim_command))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("adminstats", admin_stats))
-    app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang_"))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_message))
-    app.add_handler(ChatMemberHandler(track_new_member, ChatMemberHandler.CHAT_MEMBER))
+    # Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("claim", claim_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("adminstats", admin_stats))
+    application.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang_"))
+    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_message))
+    application.add_handler(ChatMemberHandler(track_new_member, ChatMemberHandler.CHAT_MEMBER))
 
-    logger.info("Bot polling...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("Bot polling started (v20+)...")
+    application.run_polling(
+        drop_pending_updates=True,      # ← important: clean start
+        allowed_updates=Update.ALL_TYPES
+    )
 
 
 if __name__ == "__main__":
