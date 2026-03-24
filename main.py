@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-import telegram.error  # for specific BadRequest handling
+import telegram.error   # ← for specific error handling
 
 import sheets
 from config import PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME, get_channel
@@ -64,10 +64,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name or "there"
 
     keyboard = [
-        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
-         InlineKeyboardButton("🇮🇹 Italiano", callback_data="lang_it")],
-        [InlineKeyboardButton("🇫🇷 Français", callback_data="lang_fr"),
-         InlineKeyboardButton("🇲🇽 Español", callback_data="lang_mx")],
+        [
+            InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
+            InlineKeyboardButton("🇮🇹 Italiano", callback_data="lang_it"),
+        ],
+        [
+            InlineKeyboardButton("🇫🇷 Français", callback_data="lang_fr"),
+            InlineKeyboardButton("🇲🇽 Español", callback_data="lang_mx"),
+        ],
     ]
 
     welcome = (
@@ -108,9 +112,7 @@ async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
     link = data["link"]
     first_name = data["first_name"]
 
-    if sheets.get_invite_count(user_id) > 0:
-        return
-    if not sheets.get_user_invite_link(user_id):
+    if sheets.get_invite_count(user_id) > 0 or not sheets.get_user_invite_link(user_id):
         return
 
     try:
@@ -121,7 +123,7 @@ async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
         context.job_queue.run_once(
             remove_inactive_link,
             when=timedelta(hours=REMOVAL_DELAY_HOURS),
-            data={"user_id": user_id, "lang": lang, "first_name": first_name, "channel_id": data["channel_id"], "link": link},
+            data=data,
             name=f"remove_{user_id}",
         )
     except Exception as e:
@@ -132,19 +134,16 @@ async def remove_inactive_link(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_id = data["user_id"]
     lang = data["lang"]
-    first_name = data["first_name"]
     channel_id = data["channel_id"]
     link_url = data["link"]
 
-    if sheets.get_invite_count(user_id) > 0:
-        return
-    if not sheets.get_user_invite_link(user_id):
+    if sheets.get_invite_count(user_id) > 0 or not sheets.get_user_invite_link(user_id):
         return
 
     try:
         await context.bot.revoke_chat_invite_link(chat_id=channel_id, invite_link=link_url)
     except Exception as e:
-        logger.warning(f"Could not revoke link on Telegram for {user_id}: {e}")
+        logger.warning(f"Could not revoke link for {user_id}: {e}")
 
     sheets.remove_invite_link(user_id)
     logger.info(f"Invite link removed for inactive user {user_id}")
@@ -162,9 +161,7 @@ async def remove_inactive_link(context: ContextTypes.DEFAULT_TYPE):
 # ─── "invite" keyword ────────────────────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-    if update.message.text.strip().lower() != "invite":
+    if not update.message or update.message.text.strip().lower() != "invite":
         return
 
     user = update.effective_user
@@ -189,11 +186,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channel_id = get_channel(lang)
 
-    # ── DEBUG LOG (only visible in Railway logs) ─────────────────────────────
+    # ── DEBUG LOG (visible only in Railway logs) ─────────────────────────────
     logger.info(f"🔍 Creating invite link → channel_id={channel_id} | user={user_id} | lang={lang}")
     # ───────────────────────────────────────────────────────────────────────
 
     try:
+        # Extra check to see exact channel status
+        chat = await context.bot.get_chat(channel_id)
+        logger.info(f"✅ Bot can see channel: {chat.title} | type={chat.type}")
+
         invite = await context.bot.create_chat_invite_link(
             chat_id=channel_id,
             name=full_name,
@@ -227,10 +228,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except telegram.error.BadRequest as e:
-        if "chat not found" in str(e).lower():
-            # User-friendly message only
-            await update.message.reply_text("❌ Sorry, I couldn't create your invite link right now.\nPlease try again in a moment.")
-            logger.error(f"❌ Chat not found → channel_id={channel_id} | user={user_id} | lang={lang}")
+        if "chat not found" in str(e).lower() or "forbidden" in str(e).lower():
+            # Friendly message for the user
+            await update.message.reply_text(
+                "❌ Sorry, I couldn't create your invite link right now.\n"
+                "Please try again in a moment."
+            )
+            logger.error(f"❌ Chat/Permission issue → channel_id={channel_id} | error={e}")
         else:
             await update.message.reply_text("❌ Something went wrong. Please try again.")
             logger.error(f"BadRequest creating link: {e}")
