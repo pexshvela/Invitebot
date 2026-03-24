@@ -1,86 +1,154 @@
+# ============================================================
+#  sheets.py — Complete Google Sheets backend (fixed for your bot)
+# ============================================================
+
 import os
 import json
 import logging
+from datetime import datetime
+
 import gspread
 from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger(__name__)
 
-# Scopes needed for Google Sheets + Drive (Drive scope sometimes helps with permissions)
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Global cache for the spreadsheet object
-_spreadsheet: gspread.Spreadsheet | None = None
+_spreadsheet = None
 
 
-def get_spreadsheet() -> gspread.Spreadsheet:
-    """Get (and cache) the spreadsheet object with full debug logging"""
+def get_spreadsheet():
+    """Get (and cache) the spreadsheet object"""
     global _spreadsheet
-
     if _spreadsheet is None:
         try:
-            # Load credentials from Railway environment variable
             creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
             if not creds_json:
-                logger.error("❌ GOOGLE_CREDENTIALS_JSON environment variable is missing!")
-                raise ValueError("Missing GOOGLE_CREDENTIALS_JSON")
+                raise ValueError("Missing GOOGLE_CREDENTIALS_JSON env var")
 
             creds_dict = json.loads(creds_json)
-
-            # ==================== DEBUG LOGS (VERY IMPORTANT) ====================
-            client_email = creds_dict.get("client_email")
             sheet_id = os.getenv("GOOGLE_SHEET_ID")
-            logger.info(f"🔑 Using service account: {client_email}")
+
+            logger.info(f"🔑 Using service account: {creds_dict.get('client_email')}")
             logger.info(f"📊 Opening spreadsheet ID: {sheet_id}")
-            # =====================================================================
 
-            if not sheet_id:
-                logger.error("❌ GOOGLE_SHEET_ID environment variable is missing!")
-                raise ValueError("Missing GOOGLE_SHEET_ID")
-
-            # Authorize and open
             creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
             client = gspread.authorize(creds)
-
             _spreadsheet = client.open_by_key(sheet_id)
             logger.info("✅ Successfully connected to Google Spreadsheet!")
 
-        except json.JSONDecodeError:
-            logger.error("❌ GOOGLE_CREDENTIALS_JSON is not valid JSON")
-            raise
         except Exception as e:
             logger.error(f"❌ Sheets init failed: {e}")
             raise
-
     return _spreadsheet
 
 
-def get_worksheet(name: str) -> gspread.Worksheet:
-    """Get a worksheet by its exact name"""
+def get_worksheet(name: str):
+    """Get a worksheet by name"""
     ss = get_spreadsheet()
     return ss.worksheet(name)
 
 
 def setup_sheets():
-    """Called from main.py - initializes all worksheets"""
+    """Called from main.py — initializes everything"""
     logger.info("Setting up Google Sheets...")
     try:
-        members_ws = get_worksheet("Members")
-        # Add more worksheets here if you use them later:
-        # logs_ws = get_worksheet("Logs")
-        # settings_ws = get_worksheet("Settings")
-
+        get_worksheet("Members")
+        get_worksheet("Claims")
         logger.info("✅ All worksheets loaded successfully")
-        
-        # Return them so main.py can use them if needed
-        return {
-            "members": members_ws,
-            # "logs": logs_ws,      # uncomment when you add more sheets
-        }
-
     except Exception as e:
         logger.error(f"Failed to setup sheets: {e}")
         raise
+
+
+# ====================== USER LANGUAGE ======================
+def set_user_language(user_id: int, lang: str):
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        ws.update_cell(cell.row, 4, lang)          # Column D = Language
+    else:
+        ws.append_row([str(user_id), "", "", lang, "", 0, datetime.now().isoformat()])
+
+
+def get_user_language(user_id: int) -> str | None:
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        return ws.cell(cell.row, 4).value
+    return None
+
+
+# ====================== INVITE LINK & COUNT ======================
+def save_member(user_id: int, username: str, full_name: str, lang: str, invite_link: str):
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    now = datetime.now().isoformat()
+    if cell:
+        row = cell.row
+        ws.update(f"D{row}:F{row}", [[lang, invite_link, 0]])
+    else:
+        ws.append_row([str(user_id), username, full_name, lang, invite_link, 0, now])
+
+
+def get_user_invite_link(user_id: int) -> str | None:
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        return ws.cell(cell.row, 5).value   # Column E = InviteLink
+    return None
+
+
+def remove_invite_link(user_id: int):
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        ws.update_cell(cell.row, 5, "")     # Clear link
+        ws.update_cell(cell.row, 6, 0)      # Reset count
+
+
+def get_invite_count(user_id: int) -> int:
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        count = ws.cell(cell.row, 6).value
+        return int(count) if count else 0
+    return 0
+
+
+def increment_invite_count(user_id: int) -> int:
+    ws = get_worksheet("Members")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        current = int(ws.cell(cell.row, 6).value or 0)
+        new_count = current + 1
+        ws.update_cell(cell.row, 6, new_count)
+        return new_count
+    return 0
+
+
+def get_link_owner(invite_link: str) -> int | None:
+    ws = get_worksheet("Members")
+    cell = ws.find(invite_link, in_column=5)
+    if cell:
+        user_id = ws.cell(cell.row, 1).value
+        return int(user_id) if user_id else None
+    return None
+
+
+# ====================== CLAIMS ======================
+def get_claimed_promo(user_id: int) -> str | None:
+    ws = get_worksheet("Claims")
+    cell = ws.find(str(user_id), in_column=1)
+    if cell:
+        return ws.cell(cell.row, 3).value   # PromoName
+    return None
+
+
+def save_claim(user_id: int, username: str, promo_name: str, promo_code: str):
+    ws = get_worksheet("Claims")
+    now = datetime.now().isoformat()
+    ws.append_row([str(user_id), username, promo_name, promo_code, now])
