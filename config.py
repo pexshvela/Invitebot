@@ -7,7 +7,7 @@
 # Set TEST_MODE = True to route ALL languages to the test channel
 # Set TEST_MODE = False when you're ready to go live with all 4 channels
 TEST_MODE = True
-TEST_CHANNEL_ID = -1001002961190744  # ← your test channel
+TEST_CHANNEL_ID = -1002916936846  # ← your test channel
 
 # --- Channel IDs per language (used when TEST_MODE = False) ---
 CHANNELS = {
