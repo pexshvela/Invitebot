@@ -1,10 +1,12 @@
 # ============================================================
-#  main.py — Invite Challenge Telegram Bot
+#  main.py — Invite Challenge Telegram Bot (v22+ FIXED)
 # ============================================================
 
 import os
 import logging
 from datetime import timedelta
+
+import telegram  # ← added for version debug
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -105,7 +107,6 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── Inactivity Jobs ─────────────────────────────────────────────────────────
 
 async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
-    """Fires 24h after invite link issued — warns if still 0 invites."""
     data = context.job.data
     user_id = data["user_id"]
     lang = data["lang"]
@@ -122,7 +123,6 @@ async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
         logger.info(f"Inactivity warning sent to {user_id}")
 
-        # Schedule link removal 24h after warning
         context.job_queue.run_once(
             remove_inactive_link,
             when=timedelta(hours=REMOVAL_DELAY_HOURS),
@@ -134,7 +134,6 @@ async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def remove_inactive_link(context: ContextTypes.DEFAULT_TYPE):
-    """Fires 24h after warning — removes link if still 0 invites."""
     data = context.job.data
     user_id = data["user_id"]
     lang = data["lang"]
@@ -147,13 +146,11 @@ async def remove_inactive_link(context: ContextTypes.DEFAULT_TYPE):
     if not sheets.get_user_invite_link(user_id):
         return
 
-    # Revoke on Telegram
     try:
         await context.bot.revoke_chat_invite_link(chat_id=channel_id, invite_link=link_url)
     except Exception as e:
         logger.warning(f"Could not revoke link on Telegram for {user_id}: {e}")
 
-    # Remove from sheets
     sheets.remove_invite_link(user_id)
     logger.info(f"Invite link removed for inactive user {user_id}")
 
@@ -217,7 +214,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="Markdown")
         logger.info(f"Link created for {username} ({user_id}) lang={lang}")
 
-        # Schedule 24h inactivity warning
         context.job_queue.run_once(
             send_inactivity_warning,
             when=timedelta(hours=WARNING_DELAY_HOURS),
@@ -280,7 +276,7 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(get_msg(lang, "claim_not_eligible"), parse_mode="Markdown")
         return
 
-    promo_code = promo_name  # ← replace with real codes in config.py when ready
+    promo_code = promo_name
     sheets.save_claim(user_id, username, promo_name, promo_code)
 
     msg = fmt(
@@ -365,8 +361,8 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     logger.info("Starting bot...")
+    logger.info(f"📦 Using python-telegram-bot version: {telegram.__version__}")   # ← debug line
 
-    # Setup Google Sheets
     try:
         sheets.setup_sheets()
         logger.info("Google Sheets ready.")
@@ -374,10 +370,8 @@ def main():
         logger.error(f"Sheets init failed: {e}")
         raise
 
-    # Build modern v20+ Application (no Updater!)
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("claim", claim_command))
@@ -387,9 +381,9 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_message))
     application.add_handler(ChatMemberHandler(track_new_member, ChatMemberHandler.CHAT_MEMBER))
 
-    logger.info("Bot polling started (v20+)...")
+    logger.info("Bot polling started (v22+)...")
     application.run_polling(
-        drop_pending_updates=True,      # ← important: clean start
+        drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES
     )
 
