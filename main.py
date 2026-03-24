@@ -6,7 +6,7 @@ import os
 import logging
 from datetime import timedelta
 
-import telegram  # ← for version debug
+import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-import telegram.error  # ← NEW: for specific BadRequest handling
+import telegram.error  # for specific BadRequest handling
 
 import sheets
 from config import PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME, get_channel
@@ -64,21 +64,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name or "there"
 
     keyboard = [
-        [
-            InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
-            InlineKeyboardButton("🇮🇹 Italiano", callback_data="lang_it"),
-        ],
-        [
-            InlineKeyboardButton("🇫🇷 Français", callback_data="lang_fr"),
-            InlineKeyboardButton("🇲🇽 Español", callback_data="lang_mx"),
-        ],
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
+         InlineKeyboardButton("🇮🇹 Italiano", callback_data="lang_it")],
+        [InlineKeyboardButton("🇫🇷 Français", callback_data="lang_fr"),
+         InlineKeyboardButton("🇲🇽 Español", callback_data="lang_mx")],
     ]
 
     welcome = (
         f"👋 Hello, *{first_name}*! Welcome to *{BRAND_NAME}*!\n\n"
         "Ciao! / Bonjour! / ¡Hola!\n\n"
-        "🌍 Please choose your language:\n"
-        "Scegli la lingua / Choisissez votre langue / Elige tu idioma:"
+        "🌍 Please choose your language:"
     )
     await update.message.reply_text(
         welcome,
@@ -194,7 +189,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channel_id = get_channel(lang)
 
-    # ── DEBUG LOGS (you will see these in Railway logs) ─────────────────────
+    # ── DEBUG LOG (only visible in Railway logs) ─────────────────────────────
     logger.info(f"🔍 Creating invite link → channel_id={channel_id} | user={user_id} | lang={lang}")
     # ───────────────────────────────────────────────────────────────────────
 
@@ -233,13 +228,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except telegram.error.BadRequest as e:
         if "chat not found" in str(e).lower():
-            await update.message.reply_text(
-                "❌ I can't create an invite link right now.\n"
-                "Please make sure the bot is **admin** in the channel with the permission "
-                "**'Invite users via link'** enabled.\n"
-                "Also check that the channel ID in `config.py` is correct."
-            )
-            logger.error(f"❌ Chat not found for channel_id={channel_id} (user={user_id})")
+            # User-friendly message only
+            await update.message.reply_text("❌ Sorry, I couldn't create your invite link right now.\nPlease try again in a moment.")
+            logger.error(f"❌ Chat not found → channel_id={channel_id} | user={user_id} | lang={lang}")
         else:
             await update.message.reply_text("❌ Something went wrong. Please try again.")
             logger.error(f"BadRequest creating link: {e}")
