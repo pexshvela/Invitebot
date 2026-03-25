@@ -1,5 +1,8 @@
 # ============================================================
-#  sheets.py — Google Sheets backend
+#  sheets.py — Google Sheets backend (gspread 6+ compatible)
+#
+#  KEY FIX: In gspread 6+, ws.find() returns None when not found
+#  instead of raising CellNotFound. All lookups handle None.
 # ============================================================
 
 import os
@@ -20,6 +23,8 @@ SCOPES = [
 _spreadsheet = None
 
 
+# ─── Connection ──────────────────────────────────────────────────────────────
+
 def get_spreadsheet():
     global _spreadsheet
     if _spreadsheet is None:
@@ -37,68 +42,74 @@ def get_spreadsheet():
 
 
 def get_worksheet(name: str):
+    """Get worksheet by name, creating it if needed."""
     ss = get_spreadsheet()
     try:
         return ss.worksheet(name)
     except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=name, rows=5000, cols=20)
-        return ws
+        logger.info(f"Creating worksheet: {name}")
+        return ss.add_worksheet(title=name, rows=5000, cols=20)
 
 
 def setup_sheets():
-    """Create all tabs with headers if they don't exist yet."""
-
-    # ── Members ──────────────────────────────────────────────
-    # Columns: user_id | username | full_name | language | invite_link | date_joined | invite_count
-    ws = get_worksheet("Members")
-    if not ws.get_all_values():
-        ws.append_row(["user_id", "username", "full_name", "language",
-                       "invite_link", "date_joined", "invite_count"])
-
-    # ── Joins ────────────────────────────────────────────────
-    # Every valid join is logged here.
-    # Used to block rejoin fraud: if (invited_user_id, inviter_id) already exists → skip.
-    # Columns: invited_user_id | invited_username | invited_full_name | inviter_user_id | invite_link | joined_at
-    ws = get_worksheet("Joins")
-    if not ws.get_all_values():
-        ws.append_row(["invited_user_id", "invited_username", "invited_full_name",
-                       "inviter_user_id", "invite_link", "joined_at"])
-
-    # ── Claims ───────────────────────────────────────────────
-    # Columns: user_id | username | promo_name | promo_code | date_claimed
-    ws = get_worksheet("Claims")
-    if not ws.get_all_values():
-        ws.append_row(["user_id", "username", "promo_name", "promo_code", "date_claimed"])
-
-    # ── Stats ────────────────────────────────────────────────
-    # Columns: user_id | username | language | invite_count | last_updated
-    ws = get_worksheet("Stats")
-    if not ws.get_all_values():
-        ws.append_row(["user_id", "username", "language", "invite_count", "last_updated"])
+    """
+    Creates all required tabs with headers if they don't exist.
+    Safe to call on every startup — only adds headers to empty sheets.
+    """
+    tabs = {
+        "Members": ["user_id", "username", "full_name", "language",
+                    "invite_link", "date_joined", "invite_count"],
+        "Joins":   ["invited_user_id", "invited_username", "invited_full_name",
+                    "inviter_user_id", "invite_link", "joined_at"],
+        "Claims":  ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
+        "Stats":   ["user_id", "username", "language", "invite_count", "last_updated"],
+    }
+    for tab_name, headers in tabs.items():
+        ws = get_worksheet(tab_name)
+        existing = ws.get_all_values()
+        if not existing:
+            ws.append_row(headers)
+            logger.info(f"Initialized tab: {tab_name}")
+        else:
+            logger.info(f"Tab '{tab_name}' already has data ({len(existing)} rows).")
 
     logger.info("All sheets ready.")
 
 
-# ─── Language ────────────────────────────────────────────────────────────────
+# ─── Safe find helper ─────────────────────────────────────────────────────────
 
-def _find_member_row(user_id: int):
-    ws = get_worksheet("Members")
+def _find_cell(ws, value: str, in_column: int):
+    """
+    gspread 6+ compatible find. Returns the cell or None.
+    Never raises CellNotFound.
+    """
     try:
-        cell = ws.find(str(user_id), in_column=1)
-        return ws, cell.row
-    except gspread.exceptions.CellNotFound:
+        return ws.find(value, in_column=in_column)
+    except Exception:
+        return None
+
+
+# ─── Members ─────────────────────────────────────────────────────────────────
+
+def _get_member_row(user_id: int):
+    """Returns (worksheet, row_number) or (worksheet, None) if not found."""
+    ws = get_worksheet("Members")
+    cell = _find_cell(ws, str(user_id), in_column=1)
+    if cell is None:
         return ws, None
+    return ws, cell.row
 
 
 def get_user_language(user_id: int) -> str | None:
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     if row is None:
         return None
-    return ws.cell(row, 4).value or None
+    val = ws.cell(row, 4).value
+    return val if val else None
 
 
 def set_user_language(user_id: int, lang: str):
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     if row is None:
         ws.append_row([str(user_id), "", "", lang, "", now, 0])
@@ -106,10 +117,8 @@ def set_user_language(user_id: int, lang: str):
         ws.update_cell(row, 4, lang)
 
 
-# ─── Invite Link ─────────────────────────────────────────────────────────────
-
 def get_user_invite_link(user_id: int) -> str | None:
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     if row is None:
         return None
     val = ws.cell(row, 5).value
@@ -117,17 +126,17 @@ def get_user_invite_link(user_id: int) -> str | None:
 
 
 def save_member(user_id: int, username: str, full_name: str, lang: str, invite_link: str):
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     if row is None:
         ws.append_row([str(user_id), username, full_name, lang, invite_link, now, 0])
     else:
-        ws.update(f"B{row}:G{row}", [[username, full_name, lang, invite_link, now,
-                                      ws.cell(row, 7).value or 0]])
+        existing_count = ws.cell(row, 7).value or 0
+        ws.update(f"B{row}:G{row}", [[username, full_name, lang, invite_link, now, existing_count]])
 
 
 def remove_invite_link(user_id: int):
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     if row is None:
         return
     ws.update_cell(row, 5, "")
@@ -136,18 +145,28 @@ def remove_invite_link(user_id: int):
 
 def get_link_owner(link_url: str) -> int | None:
     ws = get_worksheet("Members")
+    cell = _find_cell(ws, link_url, in_column=5)
+    if cell is None:
+        return None
     try:
-        cell = ws.find(link_url, in_column=5)
-        val = ws.cell(cell.row, 1).value
-        return int(val) if val else None
-    except (gspread.exceptions.CellNotFound, ValueError, TypeError):
+        return int(ws.cell(cell.row, 1).value)
+    except (ValueError, TypeError):
         return None
 
 
-# ─── Invite count ────────────────────────────────────────────────────────────
+def count_active_inviters() -> int:
+    """Count members who have a non-empty invite link."""
+    ws = get_worksheet("Members")
+    rows = ws.get_all_values()
+    if len(rows) <= 1:
+        return 0
+    return sum(1 for row in rows[1:] if len(row) >= 5 and row[4].strip())
+
+
+# ─── Invite counts ───────────────────────────────────────────────────────────
 
 def get_invite_count(user_id: int) -> int:
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     if row is None:
         return 0
     try:
@@ -157,7 +176,7 @@ def get_invite_count(user_id: int) -> int:
 
 
 def increment_invite_count(user_id: int) -> int:
-    ws, row = _find_member_row(user_id)
+    ws, row = _get_member_row(user_id)
     if row is None:
         return 0
     new_count = get_invite_count(user_id) + 1
@@ -169,11 +188,10 @@ def increment_invite_count(user_id: int) -> int:
         lang = ws.cell(row, 4).value or ""
         stats_ws = get_worksheet("Stats")
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            c = stats_ws.find(str(user_id), in_column=1)
-            stats_ws.update(f"A{c.row}:E{c.row}",
-                            [[str(user_id), username, lang, new_count, now]])
-        except gspread.exceptions.CellNotFound:
+        c = _find_cell(stats_ws, str(user_id), in_column=1)
+        if c:
+            stats_ws.update(f"A{c.row}:E{c.row}", [[str(user_id), username, lang, new_count, now]])
+        else:
             stats_ws.append_row([str(user_id), username, lang, new_count, now])
     except Exception as e:
         logger.warning(f"Stats update failed: {e}")
@@ -181,30 +199,15 @@ def increment_invite_count(user_id: int) -> int:
     return new_count
 
 
-# ─── Max inviters check ──────────────────────────────────────────────────────
-
-def count_active_inviters() -> int:
-    """Count how many members have a non-empty invite link (= active inviters)."""
-    ws = get_worksheet("Members")
-    rows = ws.get_all_values()
-    if not rows:
-        return 0
-    # Skip header row, count rows where col E (invite_link) is not empty
-    return sum(1 for row in rows[1:] if len(row) >= 5 and row[4].strip())
-
-
-# ─── Joins / fraud prevention ────────────────────────────────────────────────
+# ─── Joins (fraud prevention) ─────────────────────────────────────────────────
 
 def has_already_joined(invited_user_id: int, inviter_user_id: int) -> bool:
-    """
-    Returns True if this exact (invited_user, inviter) pair is already in the Joins sheet.
-    Blocks rejoin fraud: leaving and rejoining the channel won't count again.
-    """
+    """Returns True if this (invited, inviter) pair already exists — blocks rejoin fraud."""
     ws = get_worksheet("Joins")
     try:
-        cells = ws.findall(str(invited_user_id), in_column=1)
-        for cell in cells:
-            if ws.cell(cell.row, 4).value == str(inviter_user_id):
+        all_rows = ws.get_all_values()
+        for row in all_rows[1:]:  # skip header
+            if len(row) >= 4 and row[0] == str(invited_user_id) and row[3] == str(inviter_user_id):
                 return True
     except Exception as e:
         logger.warning(f"has_already_joined check failed: {e}")
@@ -213,28 +216,21 @@ def has_already_joined(invited_user_id: int, inviter_user_id: int) -> bool:
 
 def record_join(invited_user_id: int, invited_username: str, invited_full_name: str,
                 inviter_user_id: int, invite_link: str):
-    """Log a valid new join to the Joins sheet."""
+    """Log a valid new join."""
     ws = get_worksheet("Joins")
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    ws.append_row([
-        str(invited_user_id),
-        invited_username,
-        invited_full_name,
-        str(inviter_user_id),
-        invite_link,
-        now,
-    ])
+    ws.append_row([str(invited_user_id), invited_username, invited_full_name,
+                   str(inviter_user_id), invite_link, now])
 
 
 # ─── Claims ──────────────────────────────────────────────────────────────────
 
 def get_claimed_promo(user_id: int) -> str | None:
     ws = get_worksheet("Claims")
-    try:
-        cell = ws.find(str(user_id), in_column=1)
-        return ws.cell(cell.row, 4).value  # col D = promo_code
-    except gspread.exceptions.CellNotFound:
+    cell = _find_cell(ws, str(user_id), in_column=1)
+    if cell is None:
         return None
+    return ws.cell(cell.row, 4).value  # col D = promo_code
 
 
 def save_claim(user_id: int, username: str, promo_name: str, promo_code: str):
@@ -243,11 +239,10 @@ def save_claim(user_id: int, username: str, promo_name: str, promo_code: str):
     ws.append_row([str(user_id), username, promo_name, promo_code, now])
 
 
+# ─── Full reset ───────────────────────────────────────────────────────────────
+
 def reset_all_data():
-    """
-    Wipes all data from Members, Joins, Claims, Stats sheets.
-    Keeps the header row in each. Used by admin /reset command.
-    """
+    """Wipe all data sheets, keep headers. Used by /resetconfirm admin command."""
     headers = {
         "Members": ["user_id", "username", "full_name", "language",
                     "invite_link", "date_joined", "invite_count"],
