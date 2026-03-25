@@ -57,12 +57,13 @@ def setup_sheets():
     Safe to call on every startup — only adds headers to empty sheets.
     """
     tabs = {
-        "Members": ["user_id", "username", "full_name", "language",
-                    "invite_link", "date_joined", "invite_count"],
-        "Joins":   ["invited_user_id", "invited_username", "invited_full_name",
-                    "inviter_user_id", "invite_link", "joined_at"],
-        "Claims":  ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
-        "Stats":   ["user_id", "username", "language", "invite_count", "last_updated"],
+        "Members":   ["user_id", "username", "full_name", "language",
+                      "invite_link", "date_joined", "invite_count"],
+        "Joins":     ["invited_user_id", "invited_username", "invited_full_name",
+                      "inviter_user_id", "invite_link", "joined_at"],
+        "Claims":    ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
+        "Stats":     ["user_id", "username", "language", "invite_count", "last_updated"],
+        "FirstSeen": ["user_id", "first_seen_at"],
     }
     for tab_name, headers in tabs.items():
         ws = get_worksheet(tab_name)
@@ -223,6 +224,38 @@ def record_join(invited_user_id: int, invited_username: str, invited_full_name: 
                    str(inviter_user_id), invite_link, now])
 
 
+# ─── First Seen (account age fraud prevention) ───────────────────────────────
+
+def record_first_seen(user_id: int):
+    """
+    Records the first time this user_id is seen by the bot.
+    Safe to call multiple times — only writes on the very first call.
+    """
+    ws = get_worksheet("FirstSeen")
+    cell = _find_cell(ws, str(user_id), in_column=1)
+    if cell is None:
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ws.append_row([str(user_id), now])
+        logger.info(f"First seen recorded for user {user_id}")
+
+
+def get_first_seen(user_id: int) -> datetime | None:
+    """
+    Returns the datetime when this user_id was first seen, or None if unknown.
+    """
+    ws = get_worksheet("FirstSeen")
+    cell = _find_cell(ws, str(user_id), in_column=1)
+    if cell is None:
+        return None
+    try:
+        val = ws.cell(cell.row, 2).value
+        if val:
+            return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        logger.warning(f"get_first_seen parse failed for {user_id}: {e}")
+    return None
+
+
 # ─── Claims ──────────────────────────────────────────────────────────────────
 
 def get_claimed_promo(user_id: int) -> str | None:
@@ -244,12 +277,13 @@ def save_claim(user_id: int, username: str, promo_name: str, promo_code: str):
 def reset_all_data():
     """Wipe all data sheets, keep headers. Used by /resetconfirm admin command."""
     headers = {
-        "Members": ["user_id", "username", "full_name", "language",
-                    "invite_link", "date_joined", "invite_count"],
-        "Joins":   ["invited_user_id", "invited_username", "invited_full_name",
-                    "inviter_user_id", "invite_link", "joined_at"],
-        "Claims":  ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
-        "Stats":   ["user_id", "username", "language", "invite_count", "last_updated"],
+        "Members":   ["user_id", "username", "full_name", "language",
+                      "invite_link", "date_joined", "invite_count"],
+        "Joins":     ["invited_user_id", "invited_username", "invited_full_name",
+                      "inviter_user_id", "invite_link", "joined_at"],
+        "Claims":    ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
+        "Stats":     ["user_id", "username", "language", "invite_count", "last_updated"],
+        "FirstSeen": ["user_id", "first_seen_at"],
     }
     for tab_name, header_row in headers.items():
         ws = get_worksheet(tab_name)
