@@ -25,6 +25,15 @@ MAX_INVITERS = 0
 # False → allow everyone regardless of profile photo
 CHECK_PROFILE_PHOTO = False
 
+# ─── NEW ACCOUNT AGE PROTECTION ──────────────────────────────
+# True  → block accounts younger than MIN_ACCOUNT_AGE_HOURS
+# False → allow accounts of any age
+CHECK_ACCOUNT_AGE = True
+
+# Minimum account age in hours required to count as a valid invite
+# Accounts younger than this will be ignored and the inviter notified
+MIN_ACCOUNT_AGE_HOURS = 24
+
 # ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
     "en": -1002326259934,
