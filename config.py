@@ -7,7 +7,7 @@
 # True  → all languages go to the test channel
 # False → each language goes to its own real channel
 TEST_MODE = True
-TEST_CHANNEL_ID = -1001002961190744  # ← your test channel ID
+TEST_CHANNEL_ID = -1002916936846  # ← your test channel ID
 
 # ─── CAMPAIGN STATUS ─────────────────────────────────────────
 # True  → campaign is running normally
