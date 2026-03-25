@@ -4,7 +4,6 @@
 
 import os
 import logging
-import asyncio
 from datetime import timedelta
 from html import escape
 
@@ -169,7 +168,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Create invite link ────────────────────────────────────────────────────
     channel_id = get_channel(lang)
 
-    # Step 1: Create the Telegram invite link
     try:
         invite = await context.bot.create_chat_invite_link(
             chat_id=channel_id,
@@ -177,62 +175,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             creates_join_request=False,
         )
         link_url = invite.invite_link
-    except Exception as e:
-        logger.error(f"[TELEGRAM ERROR] Invite link failed for {user_id}: {e}")
-        await update.message.reply_text(
-            "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment."
+
+        sheets.save_member(
+            user_id=user_id, username=username,
+            full_name=full_name, lang=lang, invite_link=link_url,
         )
-        # Notify admin
-        try:
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"⚠️ <b>Telegram API error</b>\n\n"
-                     f"User: {username} ({user_id})\n"
-                     f"Channel: {channel_id}\n"
-                     f"Error: <code>{escape(str(e))}</code>",
-                parse_mode=HTML,
-            )
-        except Exception:
-            pass
-        return
 
-    # Step 2: Save to Google Sheets (with retry)
-    for attempt in range(3):
-        try:
-            sheets.save_member(
-                user_id=user_id, username=username,
-                full_name=full_name, lang=lang, invite_link=link_url,
-            )
-            break
-        except Exception as e:
-            logger.warning(f"[SHEETS ERROR] save_member attempt {attempt+1}/3 for {user_id}: {e}")
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)  # 1s, 2s backoff
-            else:
-                logger.error(f"[SHEETS ERROR] save_member FAILED after 3 attempts for {user_id}: {e}")
-                # Link was created on Telegram side — still send it to the user
-                # but warn admin about the Sheets failure
-                try:
-                    await context.bot.send_message(
-                        chat_id=ADMIN_ID,
-                        text=f"⚠️ <b>Sheets save failed</b>\n\n"
-                             f"User: {username} ({user_id})\n"
-                             f"Link was created but NOT saved to sheet.\n"
-                             f"Link: {link_url}\n"
-                             f"Error: <code>{escape(str(e))}</code>",
-                        parse_mode=HTML,
-                    )
-                except Exception:
-                    pass
+        await update.message.reply_text(
+            fmt(get_msg(lang, "invite_instruction"), first_name=first_name, link=link_url),
+            parse_mode=HTML,
+        )
+        logger.info(f"Link created for {username} ({user_id}) lang={lang}")
 
-    await update.message.reply_text(
-        fmt(get_msg(lang, "invite_instruction"), first_name=first_name, link=link_url),
-        parse_mode=HTML,
-    )
-    logger.info(f"Link created for {username} ({user_id}) lang={lang}")
-
-    # Schedule 24h inactivity warning
-    try:
+        # Schedule 24h inactivity warning
         context.job_queue.run_once(
             send_inactivity_warning,
             when=timedelta(hours=WARNING_DELAY_HOURS),
@@ -243,8 +198,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             },
             name=f"warn_{user_id}",
         )
+
     except Exception as e:
-        logger.warning(f"Failed to schedule warning job for {user_id}: {e}")
+        logger.error(f"Invite link failed for {user_id}: {e}")
+        await update.message.reply_text(
+            "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment."
+        )
 
 
 # ─── Inactivity Jobs ─────────────────────────────────────────────────────────
@@ -453,6 +412,48 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {e}")
 
 
+async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/reset — asks admin to confirm before wiping everything."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    await update.message.reply_text(
+        "⚠️ <b>WARNING — Full Reset</b>\n\n"
+        "This will permanently delete <b>ALL</b> data:\n"
+        "• All members &amp; invite links\n"
+        "• All join records\n"
+        "• All claims\n"
+        "• All stats\n\n"
+        "To confirm, send /resetconfirm\n"
+        "To cancel, just ignore this message.",
+        parse_mode=HTML,
+    )
+
+
+async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/resetconfirm — actually performs the reset."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    await update.message.reply_text("🔄 Resetting all data, please wait...")
+
+    try:
+        sheets.reset_all_data()
+        logger.info(f"Full reset performed by admin {ADMIN_ID}")
+        await update.message.reply_text(
+            "✅ <b>Reset complete!</b>\n\n"
+            "All sheets have been wiped and are ready for a new campaign.\n\n"
+            "• Members → cleared\n"
+            "• Joins → cleared\n"
+            "• Claims → cleared\n"
+            "• Stats → cleared",
+            parse_mode=HTML,
+        )
+    except Exception as e:
+        logger.error(f"Reset failed: {e}")
+        await update.message.reply_text(f"❌ Reset failed: {e}")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -473,6 +474,8 @@ def main():
     app.add_handler(CommandHandler("claim", claim_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("adminstats", admin_stats))
+    app.add_handler(CommandHandler("reset", admin_reset))
+    app.add_handler(CommandHandler("resetconfirm", admin_reset_confirm))
     app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang_"))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_message))
     app.add_handler(ChatMemberHandler(track_new_member, ChatMemberHandler.CHAT_MEMBER))
