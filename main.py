@@ -4,7 +4,7 @@
 
 import os
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from html import escape
 
 import telegram
@@ -23,6 +23,7 @@ import sheets
 from config import (
     PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME,
     CAMPAIGN_ACTIVE, MAX_INVITERS, CHECK_PROFILE_PHOTO,
+    CHECK_ACCOUNT_AGE, MIN_ACCOUNT_AGE_HOURS,
     get_channel,
 )
 from messages import MESSAGES
@@ -70,12 +71,80 @@ async def has_profile_photo(bot, user_id: int) -> bool:
         return True  # fail open — don't block if check itself fails
 
 
+def estimate_account_age_hours(user_id: int) -> float:
+    """
+    Estimates account age in hours based on Telegram's sequential user IDs.
+    This is a heuristic — not perfectly precise, but reliable enough to flag
+    very new accounts (created in the last few hours).
+    Returns a large number (99999) if the account appears old/unknown.
+    """
+    # Known approximate (user_id, creation_date) checkpoints
+    checkpoints = [
+        (2768409,    datetime(2013, 6,  1)),
+        (100000000,  datetime(2016, 1,  1)),
+        (1000000000, datetime(2020, 6,  1)),
+        (1500000000, datetime(2021, 6,  1)),
+        (2000000000, datetime(2022, 6,  1)),
+        (6000000000, datetime(2023, 6,  1)),
+        (7500000000, datetime(2024, 6,  1)),
+        (9000000000, datetime(2025, 1,  1)),
+    ]
+
+    lower_date = datetime(2013, 1, 1)
+    upper_date = datetime.utcnow()
+
+    for cp_id, cp_date in checkpoints:
+        if user_id >= cp_id:
+            lower_date = cp_date
+        else:
+            upper_date = cp_date
+            break
+
+    estimated_date = lower_date + (upper_date - lower_date) / 2
+    age_hours = (datetime.utcnow() - estimated_date).total_seconds() / 3600
+    return age_hours
+
+
+def is_account_too_new(user_id: int) -> bool:
+    """
+    Returns True if the account is likely younger than MIN_ACCOUNT_AGE_HOURS.
+    Uses two signals:
+      1. ID-based age estimate (catches brand-new accounts reliably)
+      2. FirstSeen sheet record (exact timestamp of first bot interaction)
+    Blocks only if BOTH signals indicate the account is too new, to avoid
+    false positives from the heuristic alone.
+    """
+    # Signal 1: ID heuristic
+    estimated_age = estimate_account_age_hours(user_id)
+    id_too_new = estimated_age < MIN_ACCOUNT_AGE_HOURS
+
+    if not id_too_new:
+        # ID estimate says it's old enough — trust it and allow
+        return False
+
+    # Signal 2: Check our own first-seen record
+    first_seen = sheets.get_first_seen(user_id)
+    if first_seen is None:
+        # Never seen before — record now and treat as new
+        sheets.record_first_seen(user_id)
+        return True
+
+    hours_since_first_seen = (datetime.utcnow() - first_seen).total_seconds() / 3600
+    if hours_since_first_seen < MIN_ACCOUNT_AGE_HOURS:
+        return True
+
+    return False
+
+
 # ─── /start ──────────────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     first_name = escape(user.first_name or "there")
     lang = sheets.get_user_language(user.id) or "en"
+
+    # Record first time this user touches the bot
+    sheets.record_first_seen(user.id)
 
     # Campaign ended — show message instead of language picker
     if not CAMPAIGN_ACTIVE:
@@ -123,6 +192,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or user.first_name or "user"
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or username
     first_name = user.first_name or "there"
+
+    # Record first time this user touches the bot
+    sheets.record_first_seen(user_id)
 
     lang = sheets.get_user_language(user_id)
     if not lang:
@@ -359,6 +431,32 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Rejoin blocked: {invited_user_id} already counted for {owner_id}")
         return
 
+    # ── Fraud: new account age check ──────────────────────────────────────────
+    if CHECK_ACCOUNT_AGE:
+        # Record first seen so we have an exact timestamp going forward
+        sheets.record_first_seen(invited_user_id)
+
+        if is_account_too_new(invited_user_id):
+            logger.warning(
+                f"New account blocked: {invited_user_id} ({invited_username}) "
+                f"is younger than {MIN_ACCOUNT_AGE_HOURS}h. Invited by {owner_id}."
+            )
+            # Notify the inviter in their language
+            inviter_lang = sheets.get_user_language(owner_id) or "en"
+            try:
+                await context.bot.send_message(
+                    chat_id=owner_id,
+                    text=fmt(
+                        get_msg(inviter_lang, "new_account_blocked"),
+                        username=invited_username,
+                        hours=MIN_ACCOUNT_AGE_HOURS,
+                    ),
+                    parse_mode=HTML,
+                )
+            except Exception as e:
+                logger.warning(f"Could not notify inviter {owner_id}: {e}")
+            return
+
     # ── Valid join ────────────────────────────────────────────────────────────
     sheets.record_join(
         invited_user_id=invited_user_id,
@@ -423,7 +521,8 @@ async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• All members &amp; invite links\n"
         "• All join records\n"
         "• All claims\n"
-        "• All stats\n\n"
+        "• All stats\n"
+        "• All first-seen records\n\n"
         "To confirm, send /resetconfirm\n"
         "To cancel, just ignore this message.",
         parse_mode=HTML,
@@ -446,7 +545,8 @@ async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
             "• Members → cleared\n"
             "• Joins → cleared\n"
             "• Claims → cleared\n"
-            "• Stats → cleared",
+            "• Stats → cleared\n"
+            "• FirstSeen → cleared",
             parse_mode=HTML,
         )
     except Exception as e:
@@ -458,7 +558,11 @@ async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def main():
     logger.info(f"Starting bot (python-telegram-bot {telegram.__version__})")
-    logger.info(f"Campaign active: {CAMPAIGN_ACTIVE} | Max inviters: {MAX_INVITERS} | Photo check: {CHECK_PROFILE_PHOTO}")
+    logger.info(
+        f"Campaign active: {CAMPAIGN_ACTIVE} | Max inviters: {MAX_INVITERS} | "
+        f"Photo check: {CHECK_PROFILE_PHOTO} | Account age check: {CHECK_ACCOUNT_AGE} "
+        f"(min {MIN_ACCOUNT_AGE_HOURS}h)"
+    )
 
     try:
         sheets.setup_sheets()
