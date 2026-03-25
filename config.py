@@ -1,15 +1,31 @@
 # ============================================================
 #  config.py — Edit this file to update bot settings
-#  Then redeploy on Railway (takes ~30 seconds)
+#  Then push to GitHub — Railway redeploys in ~30 seconds
 # ============================================================
 
-# --- TEST MODE ---
-# Set TEST_MODE = True to route ALL languages to the test channel
-# Set TEST_MODE = False when you're ready to go live with all 4 channels
+# ─── TEST MODE ───────────────────────────────────────────────
+# True  → all languages go to the test channel
+# False → each language goes to its own real channel
 TEST_MODE = True
-TEST_CHANNEL_ID = -1002916936846  # ← your test channel
+TEST_CHANNEL_ID = -1001002961190744  # ← your test channel ID
 
-# --- Channel IDs per language (used when TEST_MODE = False) ---
+# ─── CAMPAIGN STATUS ─────────────────────────────────────────
+# True  → campaign is running normally
+# False → bot tells everyone the campaign has ended
+CAMPAIGN_ACTIVE = True
+
+# ─── MAX INVITERS ────────────────────────────────────────────
+# Maximum number of people who can get an invite link
+# Once this limit is reached, new users will be told the campaign is full
+# Set to 0 for unlimited
+MAX_INVITERS = 10
+
+# ─── ALT ACCOUNT PROTECTION ──────────────────────────────────
+# True  → block accounts with no profile photo (likely fake/alt accounts)
+# False → allow everyone regardless of profile photo
+CHECK_PROFILE_PHOTO = False
+
+# ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
     "en": -1002326259934,
     "it": -1003220500138,
@@ -19,22 +35,24 @@ CHANNELS = {
 
 
 def get_channel(lang: str) -> int:
-    """Returns the correct channel based on TEST_MODE."""
+    """Returns the correct channel ID based on TEST_MODE."""
     if TEST_MODE:
         return TEST_CHANNEL_ID
     return CHANNELS[lang]
 
-# --- Promo tiers: (minimum_invites, promo_code_value) ---
-# Update the promo code values (right side) with your real codes when ready
+
+# ─── Promo tiers ─────────────────────────────────────────────
+# Format: (minimum_invites, promo_code)
+# Replace right side with real codes when ready
 PROMO_TIERS = [
-    (1,   "PROMO1"),
-    (6,   "PROMO2"),
-    (11,  "PROMO3"),
-    (31,  "PROMO4"),
-    (71,  "PROMO5"),
-    (100, "PROMO6"),
+    (1,   "Tier1"),
+    (6,   "Tier2"),
+    (11,  "Tier3"),
+    (31,  "Tier4"),
+    (71,  "Tier5"),
+    (100, "Tier6"),
 ]
 
-# --- General settings ---
+# ─── General settings ────────────────────────────────────────
 CLAIM_DEADLINE = "April 30, 2026"
-BRAND_NAME = "YourBrand"   # ← Change this to your brand name
+BRAND_NAME = "Rolletto"  # ← change to your brand name
