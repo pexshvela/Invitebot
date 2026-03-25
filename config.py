@@ -18,7 +18,7 @@ CAMPAIGN_ACTIVE = True
 # Maximum number of people who can get an invite link
 # Once this limit is reached, new users will be told the campaign is full
 # Set to 0 for unlimited
-MAX_INVITERS = 10
+MAX_INVITERS = 0
 
 # ─── ALT ACCOUNT PROTECTION ──────────────────────────────────
 # True  → block accounts with no profile photo (likely fake/alt accounts)
