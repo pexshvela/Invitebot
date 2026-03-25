@@ -49,6 +49,13 @@ MESSAGES = {
             "To participate in the Invite Challenge, your Telegram account must have a profile photo.\n\n"
             "Please add a profile photo and try again by sending <b>invite</b>."
         ),
+        "new_account_blocked": (
+            "⚠️ <b>New account detected.</b>\n\n"
+            "The user <b>@{username}</b> you invited has a Telegram account that is less than "
+            "<b>{hours} hours</b> old and cannot be counted as a valid invite.\n\n"
+            "Only invites from established accounts are accepted to prevent fraud. "
+            "Keep sharing your link with real users! 🔗"
+        ),
         "inactivity_warning": (
             "⚠️ <b>Important</b> ❗\n\n"
             "Hello {first_name}, if you do not invite anyone, "
@@ -135,6 +142,13 @@ MESSAGES = {
             "⚠️ <b>Non è stato possibile verificare il tuo account.</b>\n\n"
             "Per partecipare alla Invite Challenge, il tuo account Telegram deve avere una foto profilo.\n\n"
             "Aggiungi una foto profilo e riprova inviando <b>invite</b>."
+        ),
+        "new_account_blocked": (
+            "⚠️ <b>Account nuovo rilevato.</b>\n\n"
+            "L'utente <b>@{username}</b> che hai invitato ha un account Telegram di meno di "
+            "<b>{hours} ore</b> e non può essere contato come invito valido.\n\n"
+            "Sono accettati solo inviti da account consolidati per prevenire le frodi. "
+            "Continua a condividere il tuo link con utenti reali! 🔗"
         ),
         "inactivity_warning": (
             "⚠️ <b>Importante</b> ❗\n\n"
@@ -223,6 +237,13 @@ MESSAGES = {
             "Pour participer au Invite Challenge, votre compte Telegram doit avoir une photo de profil.\n\n"
             "Veuillez ajouter une photo de profil et réessayer en envoyant <b>invite</b>."
         ),
+        "new_account_blocked": (
+            "⚠️ <b>Nouveau compte détecté.</b>\n\n"
+            "L'utilisateur <b>@{username}</b> que vous avez invité a un compte Telegram de moins de "
+            "<b>{hours} heures</b> et ne peut pas être compté comme une invitation valide.\n\n"
+            "Seules les invitations de comptes établis sont acceptées pour prévenir la fraude. "
+            "Continuez à partager votre lien avec de vrais utilisateurs! 🔗"
+        ),
         "inactivity_warning": (
             "⚠️ <b>Important</b> ❗\n\n"
             "Bonjour {first_name}, si vous n'invitez personne, "
@@ -309,6 +330,13 @@ MESSAGES = {
             "⚠️ <b>No pudimos verificar tu cuenta.</b>\n\n"
             "Para participar en el Invite Challenge, tu cuenta de Telegram debe tener una foto de perfil.\n\n"
             "Por favor agrega una foto de perfil e intenta de nuevo enviando <b>invite</b>."
+        ),
+        "new_account_blocked": (
+            "⚠️ <b>Cuenta nueva detectada.</b>\n\n"
+            "El usuario <b>@{username}</b> que invitaste tiene una cuenta de Telegram de menos de "
+            "<b>{hours} horas</b> y no puede contarse como una invitación válida.\n\n"
+            "Solo se aceptan invitaciones de cuentas establecidas para prevenir el fraude. "
+            "Sigue compartiendo tu enlace con usuarios reales! 🔗"
         ),
         "inactivity_warning": (
             "⚠️ <b>Importante</b> ❗\n\n"
