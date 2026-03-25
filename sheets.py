@@ -4,6 +4,7 @@
 
 import os
 import json
+import time
 import logging
 from datetime import datetime
 
@@ -11,6 +12,27 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Simple TTL cache for member row lookups ─────────────────────────────────
+# Avoids hitting Google Sheets API multiple times for the same user in one flow
+_row_cache = {}          # {user_id: {"row": int|None, "ts": float}}
+_ROW_CACHE_TTL = 30      # seconds — short enough to stay fresh
+
+
+def _cache_get(user_id: int):
+    entry = _row_cache.get(user_id)
+    if entry and (time.time() - entry["ts"]) < _ROW_CACHE_TTL:
+        return entry["row"]
+    return "MISS"
+
+
+def _cache_set(user_id: int, row):
+    _row_cache[user_id] = {"row": row, "ts": time.time()}
+
+
+def _cache_invalidate(user_id: int):
+    _row_cache.pop(user_id, None)
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -73,10 +95,13 @@ def setup_sheets():
 
 def _find_member_row(user_id: int):
     ws = get_worksheet("Members")
+    cached = _cache_get(user_id)
+    if cached != "MISS":
+        return ws, cached
     cell = ws.find(str(user_id), in_column=1)
-    if cell is None:
-        return ws, None
-    return ws, cell.row
+    row = cell.row if cell else None
+    _cache_set(user_id, row)
+    return ws, row
 
 
 def get_user_language(user_id: int) -> str | None:
@@ -91,6 +116,7 @@ def set_user_language(user_id: int, lang: str):
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     if row is None:
         ws.append_row([str(user_id), "", "", lang, "", now, 0])
+        _cache_invalidate(user_id)  # new row added — bust cache
     else:
         ws.update_cell(row, 4, lang)
 
@@ -110,6 +136,7 @@ def save_member(user_id: int, username: str, full_name: str, lang: str, invite_l
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     if row is None:
         ws.append_row([str(user_id), username, full_name, lang, invite_link, now, 0])
+        _cache_invalidate(user_id)  # new row added — bust cache
     else:
         ws.update(f"B{row}:G{row}", [[username, full_name, lang, invite_link, now,
                                       ws.cell(row, 7).value or 0]])
@@ -121,6 +148,7 @@ def remove_invite_link(user_id: int):
         return
     ws.update_cell(row, 5, "")
     ws.update_cell(row, 7, 0)
+    _cache_invalidate(user_id)
 
 
 def get_link_owner(link_url: str) -> int | None:
