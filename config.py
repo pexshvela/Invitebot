@@ -14,6 +14,22 @@ TEST_CHANNEL_ID = -1002916936846  # ← your test channel ID
 # False → bot tells everyone the campaign has ended
 CAMPAIGN_ACTIVE = True
 
+# ─── ACTIVE LANGUAGE / MARKET ────────────────────────────────
+# Controls which language market(s) are active. Three options:
+#
+#   "all"          → all 4 languages active, user sees full 4-button picker
+#
+#   "mx"           → single market only (Spanish)
+#                    no language picker shown, everything in Spanish
+#                    same works for: "en", "it", "fr"
+#
+#   ["mx", "fr"]   → two or more specific markets at the same time
+#                    user sees a reduced picker with only those language buttons
+#                    greeting shown in all selected languages
+#                    example with 3: ["en", "it", "mx"]
+#
+ACTIVE_LANG = "all"
+
 # ─── MAX INVITERS ────────────────────────────────────────────
 # Maximum number of people who can get an invite link
 # Once this limit is reached, new users will be told the campaign is full
@@ -43,10 +59,37 @@ CHANNELS = {
 }
 
 
+def get_active_langs() -> list:
+    """Always returns the active language(s) as a list."""
+    if ACTIVE_LANG == "all":
+        return ["en", "it", "fr", "mx"]
+    if isinstance(ACTIVE_LANG, list):
+        return ACTIVE_LANG
+    return [ACTIVE_LANG]  # single string like "mx"
+
+
+def is_single_lang() -> bool:
+    """True when exactly one language is active — no picker needed."""
+    if ACTIVE_LANG == "all":
+        return False
+    if isinstance(ACTIVE_LANG, list):
+        return len(ACTIVE_LANG) == 1
+    return True  # plain string like "mx"
+
+
+def get_forced_lang() -> str | None:
+    """Returns the forced language code when is_single_lang() is True, else None."""
+    if is_single_lang():
+        return ACTIVE_LANG if isinstance(ACTIVE_LANG, str) else ACTIVE_LANG[0]
+    return None
+
+
 def get_channel(lang: str) -> int:
-    """Returns the correct channel ID based on TEST_MODE."""
+    """Returns the correct channel ID based on TEST_MODE and ACTIVE_LANG."""
     if TEST_MODE:
         return TEST_CHANNEL_ID
+    if is_single_lang():
+        return CHANNELS[get_forced_lang()]
     return CHANNELS[lang]
 
 
