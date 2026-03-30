@@ -214,13 +214,23 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(get_msg(lang, "language_set"), parse_mode=HTML)
 
 
+# Trigger words per language (with and without quotes)
+INVITE_TRIGGER_WORDS = {
+    "en": ("invite",   '"invite"'),
+    "it": ("invita",   '"invita"'),
+    "fr": ("inviter",  '"inviter"'),
+    "mx": ("invitar",  '"invitar"'),
+}
+# Flat set of all accepted words across all languages
+ALL_INVITE_TRIGGERS = {w for words in INVITE_TRIGGER_WORDS.values() for w in words}
+
+
 # ─── "invite" keyword ────────────────────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    # Accept both:  invite  and  "invite"  (with or without quotes)
-    if update.message.text.strip().lower() not in ("invite", '"invite"'):
+    if update.message.text.strip().lower() not in ALL_INVITE_TRIGGERS:
         return
 
     user = update.effective_user
