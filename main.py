@@ -24,7 +24,7 @@ from config import (
     PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME,
     CAMPAIGN_ACTIVE, MAX_INVITERS, CHECK_PROFILE_PHOTO,
     CHECK_ACCOUNT_AGE, MIN_ACCOUNT_AGE_HOURS,
-    get_channel,
+    ACTIVE_LANG, get_channel,
 )
 from messages import MESSAGES
 
@@ -41,8 +41,54 @@ WARNING_DELAY_HOURS = 24
 REMOVAL_DELAY_HOURS = 24
 HTML = "HTML"
 
+# ─── Language button labels ───────────────────────────────────────────────────
+LANG_BUTTONS = {
+    "en": "🇬🇧 English",
+    "it": "🇮🇹 Italiano",
+    "fr": "🇫🇷 Français",
+    "mx": "🇲🇽 Español",
+}
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── ACTIVE_LANG mode helpers ─────────────────────────────────────────────────
+#
+#  ACTIVE_LANG in config.py can be set to one of three forms:
+#
+#  MODE 1 — "all"
+#    All 4 languages active. User sees a picker with all 4 buttons.
+#    Example:  ACTIVE_LANG = "all"
+#
+#  MODE 2 — a list of 2+ language codes
+#    Only those languages active. User sees a picker with just those buttons.
+#    Bot greets in all selected languages.
+#    Example:  ACTIVE_LANG = ["mx", "fr"]
+#
+#  MODE 3 — a single language code string
+#    Only that language active. No picker shown at all.
+#    Bot greets and operates entirely in that language.
+#    Example:  ACTIVE_LANG = "mx"
+
+def get_active_langs() -> list[str]:
+    """Returns the list of active language codes from the ACTIVE_LANG setting."""
+    if ACTIVE_LANG == "all":
+        return ["en", "it", "fr", "mx"]
+    if isinstance(ACTIVE_LANG, list):
+        return list(ACTIVE_LANG)
+    return [ACTIVE_LANG]  # single string
+
+
+def is_single_lang() -> bool:
+    """True when exactly one language is active — no picker needed."""
+    return len(get_active_langs()) == 1
+
+
+def get_forced_lang() -> str | None:
+    """Returns the forced language code in single-lang mode, else None."""
+    if is_single_lang():
+        return get_active_langs()[0]
+    return None
+
+
+# ─── Core helpers ─────────────────────────────────────────────────────────────
 
 def get_promo_for_count(count: int):
     current = None
@@ -61,24 +107,37 @@ def fmt(template: str, **kwargs) -> str:
     return template.format(**safe)
 
 
+def build_language_picker() -> InlineKeyboardMarkup:
+    """Builds the inline language picker using only the currently active languages."""
+    active = get_active_langs()
+    buttons = [
+        InlineKeyboardButton(LANG_BUTTONS[l], callback_data=f"lang_{l}")
+        for l in active
+    ]
+    keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def build_multi_lang_greeting() -> str:
+    """
+    Builds a combined greeting for MODE 1 and MODE 2.
+    Each active language contributes its own greeting line, separated by a divider.
+    """
+    active = get_active_langs()
+    parts = [get_msg(lang, "select_language_prompt") for lang in active]
+    return "\n\n".join(parts)
+
+
 async def has_profile_photo(bot, user_id: int) -> bool:
-    """Returns True if the user has at least one profile photo."""
     try:
         photos = await bot.get_user_profile_photos(user_id, limit=1)
         return photos.total_count > 0
     except Exception as e:
         logger.warning(f"Could not check profile photo for {user_id}: {e}")
-        return True  # fail open — don't block if check itself fails
+        return True  # fail open
 
 
 def estimate_account_age_hours(user_id: int) -> float:
-    """
-    Estimates account age in hours based on Telegram's sequential user IDs.
-    This is a heuristic — not perfectly precise, but reliable enough to flag
-    very new accounts (created in the last few hours).
-    Returns a large number (99999) if the account appears old/unknown.
-    """
-    # Known approximate (user_id, creation_date) checkpoints
     checkpoints = [
         (2768409,    datetime(2013, 6,  1)),
         (100000000,  datetime(2016, 1,  1)),
@@ -89,92 +148,68 @@ def estimate_account_age_hours(user_id: int) -> float:
         (7500000000, datetime(2024, 6,  1)),
         (9000000000, datetime(2025, 1,  1)),
     ]
-
     lower_date = datetime(2013, 1, 1)
     upper_date = datetime.utcnow()
-
     for cp_id, cp_date in checkpoints:
         if user_id >= cp_id:
             lower_date = cp_date
         else:
             upper_date = cp_date
             break
-
     estimated_date = lower_date + (upper_date - lower_date) / 2
-    age_hours = (datetime.utcnow() - estimated_date).total_seconds() / 3600
-    return age_hours
+    return (datetime.utcnow() - estimated_date).total_seconds() / 3600
 
 
 def is_account_too_new(user_id: int) -> bool:
-    """
-    Returns True if the account is likely younger than MIN_ACCOUNT_AGE_HOURS.
-    Uses two signals:
-      1. ID-based age estimate (catches brand-new accounts reliably)
-      2. FirstSeen sheet record (exact timestamp of first bot interaction)
-    Blocks only if BOTH signals indicate the account is too new, to avoid
-    false positives from the heuristic alone.
-    """
-    # Signal 1: ID heuristic
-    estimated_age = estimate_account_age_hours(user_id)
-    id_too_new = estimated_age < MIN_ACCOUNT_AGE_HOURS
-
-    if not id_too_new:
-        # ID estimate says it's old enough — trust it and allow
+    if estimate_account_age_hours(user_id) >= MIN_ACCOUNT_AGE_HOURS:
         return False
-
-    # Signal 2: Check our own first-seen record
     first_seen = sheets.get_first_seen(user_id)
     if first_seen is None:
-        # Never seen before — record now and treat as new
         sheets.record_first_seen(user_id)
         return True
-
-    hours_since_first_seen = (datetime.utcnow() - first_seen).total_seconds() / 3600
-    if hours_since_first_seen < MIN_ACCOUNT_AGE_HOURS:
-        return True
-
-    return False
+    return (datetime.utcnow() - first_seen).total_seconds() / 3600 < MIN_ACCOUNT_AGE_HOURS
 
 
 # ─── /start ──────────────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    first_name = escape(user.first_name or "there")
-    lang = sheets.get_user_language(user.id) or "en"
 
-    # Record first time this user touches the bot
     sheets.record_first_seen(user.id)
 
-    # Campaign ended — show message instead of language picker
+    # ── Campaign ended ────────────────────────────────────────────────────────
     if not CAMPAIGN_ACTIVE:
-        await update.message.reply_text(
-            get_msg(lang, "campaign_ended"), parse_mode=HTML
-        )
+        lang = get_forced_lang() or sheets.get_user_language(user.id) or "en"
+        await update.message.reply_text(get_msg(lang, "campaign_ended"), parse_mode=HTML)
         return
 
-    keyboard = [
-        [InlineKeyboardButton("🇬🇧 English",  callback_data="lang_en"),
-         InlineKeyboardButton("🇮🇹 Italiano", callback_data="lang_it")],
-        [InlineKeyboardButton("🇫🇷 Français", callback_data="lang_fr"),
-         InlineKeyboardButton("🇲🇽 Español",  callback_data="lang_mx")],
-    ]
+    # ── MODE 3: Single language — no picker ───────────────────────────────────
+    if is_single_lang():
+        lang = get_forced_lang()
+        sheets.set_user_language(user.id, lang)
+        await update.message.reply_text(get_msg(lang, "welcome_single"), parse_mode=HTML)
+        return
 
+    # ── MODE 1 & 2: Language picker ───────────────────────────────────────────
+    greeting = build_multi_lang_greeting()
     await update.message.reply_text(
-        f"👋 Hello, <b>{first_name}</b>! Welcome to <b>{BRAND_NAME}</b>!\n\n"
-        "Please choose your language / Scegli la lingua / "
-        "Choisissez votre langue / Elige tu idioma:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        greeting,
+        reply_markup=build_language_picker(),
         parse_mode=HTML,
     )
 
 
-# ─── Language Selection ───────────────────────────────────────────────────────
+# ─── Language selection callback ─────────────────────────────────────────────
 
 async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     lang = query.data.split("_")[1]
+
+    if lang not in get_active_langs():
+        await query.answer("This language is not available.", show_alert=True)
+        return
+
     sheets.set_user_language(query.from_user.id, lang)
     await query.edit_message_text(get_msg(lang, "language_set"), parse_mode=HTML)
 
@@ -184,7 +219,8 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    if update.message.text.strip().lower() != "invite":
+    # Accept both:  invite  and  "invite"  (with or without quotes)
+    if update.message.text.strip().lower() not in ("invite", '"invite"'):
         return
 
     user = update.effective_user
@@ -193,17 +229,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or username
     first_name = user.first_name or "there"
 
-    # Record first time this user touches the bot
     sheets.record_first_seen(user_id)
 
-    lang = sheets.get_user_language(user_id)
-    if not lang:
-        await update.message.reply_text(
-            "👋 Please select your language first using /start", parse_mode=HTML
-        )
-        return
+    # ── Resolve language ──────────────────────────────────────────────────────
+    if is_single_lang():
+        # MODE 3: force the active language, no selection needed
+        lang = get_forced_lang()
+        sheets.set_user_language(user_id, lang)
+    else:
+        # MODE 1 & 2: user must have already picked a language via /start
+        lang = sheets.get_user_language(user_id)
+        if not lang:
+            await update.message.reply_text(
+                "👋 Please select your language first using /start", parse_mode=HTML
+            )
+            return
 
-    # ── Campaign ended check ──────────────────────────────────────────────────
+    # ── Campaign ended ────────────────────────────────────────────────────────
     if not CAMPAIGN_ACTIVE:
         await update.message.reply_text(get_msg(lang, "campaign_ended"), parse_mode=HTML)
         return
@@ -221,19 +263,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if MAX_INVITERS > 0:
         current_inviters = sheets.count_active_inviters()
         if current_inviters >= MAX_INVITERS:
-            await update.message.reply_text(
-                get_msg(lang, "campaign_full"), parse_mode=HTML
-            )
+            await update.message.reply_text(get_msg(lang, "campaign_full"), parse_mode=HTML)
             logger.info(f"Max inviters reached ({MAX_INVITERS}). Blocked {username} ({user_id})")
             return
 
-    # ── Alt account check (profile photo) ────────────────────────────────────
+    # ── Alt account check ────────────────────────────────────────────────────
     if CHECK_PROFILE_PHOTO:
         has_photo = await has_profile_photo(context.bot, user_id)
         if not has_photo:
-            await update.message.reply_text(
-                get_msg(lang, "alt_account_blocked"), parse_mode=HTML
-            )
+            await update.message.reply_text(get_msg(lang, "alt_account_blocked"), parse_mode=HTML)
             logger.info(f"Alt account blocked (no photo): {username} ({user_id})")
             return
 
@@ -259,7 +297,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         logger.info(f"Link created for {username} ({user_id}) lang={lang}")
 
-        # Schedule 24h inactivity warning
         context.job_queue.run_once(
             send_inactivity_warning,
             when=timedelta(hours=WARNING_DELAY_HOURS),
@@ -278,7 +315,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# ─── Inactivity Jobs ─────────────────────────────────────────────────────────
+# ─── Inactivity jobs ─────────────────────────────────────────────────────────
 
 async def send_inactivity_warning(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
@@ -338,7 +375,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     first_name = user.first_name or "there"
-    lang = sheets.get_user_language(user_id) or "en"
+    lang = get_forced_lang() or sheets.get_user_language(user_id) or "en"
 
     if not sheets.get_user_invite_link(user_id):
         await update.message.reply_text(get_msg(lang, "status_no_link"), parse_mode=HTML)
@@ -360,7 +397,7 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.username or user.first_name or "user"
     first_name = user.first_name or "there"
-    lang = sheets.get_user_language(user_id) or "en"
+    lang = get_forced_lang() or sheets.get_user_language(user_id) or "en"
 
     already = sheets.get_claimed_promo(user_id)
     if already:
@@ -390,7 +427,7 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── /help ───────────────────────────────────────────────────────────────────
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = sheets.get_user_language(update.effective_user.id) or "en"
+    lang = get_forced_lang() or sheets.get_user_language(update.effective_user.id) or "en"
     await update.message.reply_text(get_msg(lang, "help"), parse_mode=HTML)
 
 
@@ -414,7 +451,10 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invited_user = result.new_chat_member.user
     invited_user_id = invited_user.id
     invited_username = invited_user.username or invited_user.first_name or "unknown"
-    invited_full_name = f"{invited_user.first_name or ''} {invited_user.last_name or ''}".strip() or invited_username
+    invited_full_name = (
+        f"{invited_user.first_name or ''} {invited_user.last_name or ''}".strip()
+        or invited_username
+    )
     link_url = invite_link_obj.invite_link
 
     owner_id = sheets.get_link_owner(link_url)
@@ -426,23 +466,20 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Self-invite blocked: {invited_user_id}")
         return
 
-    # ── Fraud: rejoin (already counted before) ────────────────────────────────
+    # ── Fraud: rejoin ─────────────────────────────────────────────────────────
     if sheets.has_already_joined(invited_user_id, owner_id):
         logger.warning(f"Rejoin blocked: {invited_user_id} already counted for {owner_id}")
         return
 
-    # ── Fraud: new account age check ──────────────────────────────────────────
+    # ── Fraud: new account age ────────────────────────────────────────────────
     if CHECK_ACCOUNT_AGE:
-        # Record first seen so we have an exact timestamp going forward
         sheets.record_first_seen(invited_user_id)
-
         if is_account_too_new(invited_user_id):
             logger.warning(
                 f"New account blocked: {invited_user_id} ({invited_username}) "
-                f"is younger than {MIN_ACCOUNT_AGE_HOURS}h. Invited by {owner_id}."
+                f"younger than {MIN_ACCOUNT_AGE_HOURS}h. Invited by {owner_id}."
             )
-            # Notify the inviter in their language
-            inviter_lang = sheets.get_user_language(owner_id) or "en"
+            inviter_lang = get_forced_lang() or sheets.get_user_language(owner_id) or "en"
             try:
                 await context.bot.send_message(
                     chat_id=owner_id,
@@ -468,10 +505,9 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_count = sheets.increment_invite_count(owner_id)
     logger.info(f"Valid join recorded. Inviter {owner_id} now has {new_count} invites.")
 
-    # Notify inviter if they hit a new reward threshold
     thresholds = {t[0] for t in PROMO_TIERS}
     if new_count in thresholds:
-        lang = sheets.get_user_language(owner_id) or "en"
+        lang = get_forced_lang() or sheets.get_user_language(owner_id) or "en"
         promo = get_promo_for_count(new_count)
         try:
             await context.bot.send_message(
@@ -494,7 +530,6 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         claims  = sheets.get_worksheet("Claims").get_all_values()
         joins   = sheets.get_worksheet("Joins").get_all_values()
         active  = sheets.count_active_inviters()
-
         limit_text = f"{MAX_INVITERS}" if MAX_INVITERS > 0 else "Unlimited"
 
         await update.message.reply_text(
@@ -503,7 +538,8 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 Active inviters: <b>{active}</b> / {limit_text}\n"
             f"📥 Total joins logged: <b>{max(0, len(joins)-1)}</b>\n"
             f"🎁 Total claims: <b>{max(0, len(claims)-1)}</b>\n\n"
-            f"🟢 Campaign active: <b>{'Yes' if CAMPAIGN_ACTIVE else 'No'}</b>",
+            f"🟢 Campaign active: <b>{'Yes' if CAMPAIGN_ACTIVE else 'No'}</b>\n"
+            f"🌍 Active language(s): <b>{ACTIVE_LANG}</b>",
             parse_mode=HTML,
         )
     except Exception as e:
@@ -511,10 +547,8 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/reset — asks admin to confirm before wiping everything."""
     if update.effective_user.id != ADMIN_ID:
         return
-
     await update.message.reply_text(
         "⚠️ <b>WARNING — Full Reset</b>\n\n"
         "This will permanently delete <b>ALL</b> data:\n"
@@ -530,12 +564,9 @@ async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/resetconfirm — actually performs the reset."""
     if update.effective_user.id != ADMIN_ID:
         return
-
     await update.message.reply_text("🔄 Resetting all data, please wait...")
-
     try:
         sheets.reset_all_data()
         logger.info(f"Full reset performed by admin {ADMIN_ID}")
@@ -559,9 +590,9 @@ async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
 def main():
     logger.info(f"Starting bot (python-telegram-bot {telegram.__version__})")
     logger.info(
-        f"Campaign active: {CAMPAIGN_ACTIVE} | Max inviters: {MAX_INVITERS} | "
-        f"Photo check: {CHECK_PROFILE_PHOTO} | Account age check: {CHECK_ACCOUNT_AGE} "
-        f"(min {MIN_ACCOUNT_AGE_HOURS}h)"
+        f"Campaign active: {CAMPAIGN_ACTIVE} | Active lang: {ACTIVE_LANG} | "
+        f"Max inviters: {MAX_INVITERS} | Photo check: {CHECK_PROFILE_PHOTO} | "
+        f"Account age check: {CHECK_ACCOUNT_AGE} (min {MIN_ACCOUNT_AGE_HOURS}h)"
     )
 
     try:
