@@ -102,6 +102,7 @@ MESSAGES = {
             "• /start → change language\n\n"
             f"🏆 Invite challenge ends: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "invite_link_failed": "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment.",
         "select_language": (
             "Please choose your language / Scegli la lingua / "
             "Choisissez votre langue / Elige tu idioma:"
@@ -205,6 +206,7 @@ MESSAGES = {
             "• /start → cambia lingua\n\n"
             f"🏆 La sfida termina: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "invite_link_failed": "❌ Spiacenti, non è stato possibile creare il tuo link. Riprova tra un momento.",
         "select_language": "Scegli la tua lingua:",
     },
 
@@ -305,6 +307,7 @@ MESSAGES = {
             "• /start → changer de langue\n\n"
             f"🏆 Le défi se termine: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "invite_link_failed": "❌ Désolé, je n'ai pas pu créer votre lien. Veuillez réessayer dans un moment.",
         "select_language": "Choisissez votre langue:",
     },
 
@@ -405,6 +408,7 @@ MESSAGES = {
             "• /start → cambiar idioma\n\n"
             f"🏆 El desafío termina: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "invite_link_failed": "❌ Lo siento, no pude crear tu enlace ahora mismo. Por favor intenta de nuevo en un momento.",
         "select_language": "Elige tu idioma:",
     },
 }
