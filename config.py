@@ -6,7 +6,7 @@
 # ─── TEST MODE ───────────────────────────────────────────────
 # True  → all languages go to the test channel
 # False → each language goes to its own real channel
-TEST_MODE = True
+TEST_MODE = False
 TEST_CHANNEL_ID = -1002916936846  # ← your test channel ID
 
 # ─── CAMPAIGN STATUS ─────────────────────────────────────────
@@ -28,7 +28,7 @@ CAMPAIGN_ACTIVE = True
 #                    greeting shown in all selected languages
 #                    example with 3: ["en", "it", "mx"]
 #
-ACTIVE_LANG = "all"
+ACTIVE_LANG = "mx"
 
 # ─── MAX INVITERS ────────────────────────────────────────────
 # Maximum number of people who can get an invite link
@@ -55,7 +55,7 @@ CHANNELS = {
     "en": -1002326259934,
     "it": -1003220500138,
     "fr": -1003471986771,
-    "mx": -1003389432490,
+    "mx": -5262526241,
 }
 
 
@@ -106,5 +106,5 @@ PROMO_TIERS = [
 ]
 
 # ─── General settings ────────────────────────────────────────
-CLAIM_DEADLINE = "April 30, 2026"
+CLAIM_DEADLINE = "April 03, 2026"
 BRAND_NAME = "Rolletto"  # ← change to your brand name
