@@ -8,8 +8,12 @@ from config import CLAIM_DEADLINE, BRAND_NAME
 MESSAGES = {
     "en": {
         "language_set": (
-            "✅ Language set to <b>English</b>!\n\n"
-            "Now send the word <b>invite</b> to get your unique invite link! 🔗"
+            f"✅ Language set to <b>English</b>!\n\n"
+            "Now send the word <b>\"invite\"</b> to get your unique invite link! 🔗"
+        ),
+        "welcome_single": (
+            f"👋 Welcome to <b>{BRAND_NAME}</b>!\n\n"
+            "Send the word <b>\"invite\"</b> to get your unique invite link! 🔗"
         ),
         "campaign_ended": (
             f"🏁 <b>The {BRAND_NAME} Invite Challenge has ended.</b>\n\n"
@@ -47,7 +51,7 @@ MESSAGES = {
         "alt_account_blocked": (
             "⚠️ <b>We could not verify your account.</b>\n\n"
             "To participate in the Invite Challenge, your Telegram account must have a profile photo.\n\n"
-            "Please add a profile photo and try again by sending <b>invite</b>."
+            "Please add a profile photo and try again by sending <b>\"invite\"</b>."
         ),
         "new_account_blocked": (
             "⚠️ <b>New account detected.</b>\n\n"
@@ -64,7 +68,7 @@ MESSAGES = {
         ),
         "link_removed": (
             "❌ Your invite link has been removed due to inactivity.\n\n"
-            "Send <b>invite</b> again to get a new link and start fresh!"
+            "Send <b>\"invite\"</b> again to get a new link and start fresh!"
         ),
         "status": (
             "📊 <b>Your Invite Stats</b>\n\n"
@@ -73,7 +77,7 @@ MESSAGES = {
             "Keep sharing to unlock better rewards!\n"
             f"⏰ Claim deadline: {CLAIM_DEADLINE}"
         ),
-        "status_no_link": "You don't have an invite link yet. Send <b>invite</b> to get one!",
+        "status_no_link": "You don't have an invite link yet. Send <b>\"invite\"</b> to get one!",
         "claim_eligible": (
             "🎁 Congratulations {first_name}! You've unlocked <b>{promo}</b>!\n\n"
             "Your promo code: <code>{code}</code>\n\n"
@@ -92,18 +96,26 @@ MESSAGES = {
         ),
         "help": (
             "❓ <b>Help</b>\n\n"
-            "• Send <b>invite</b> → get your unique invite link\n"
+            "• Send <b>\"invite\"</b> → get your unique invite link\n"
             "• /status → check how many people joined\n"
             "• /claim → claim your reward\n"
             "• /start → change language\n\n"
             f"🏆 Invite challenge ends: <b>{CLAIM_DEADLINE}</b>"
+        ),
+        "select_language": (
+            "Please choose your language / Scegli la lingua / "
+            "Choisissez votre langue / Elige tu idioma:"
         ),
     },
 
     "it": {
         "language_set": (
             "✅ Lingua impostata su <b>Italiano</b>!\n\n"
-            "Ora invia la parola <b>invite</b> per ottenere il tuo link di invito unico! 🔗"
+            "Ora invia la parola <b>\"invite\"</b> per ottenere il tuo link di invito unico! 🔗"
+        ),
+        "welcome_single": (
+            f"👋 Benvenuto su <b>{BRAND_NAME}</b>!\n\n"
+            "Invia la parola <b>\"invite\"</b> per ottenere il tuo link di invito unico! 🔗"
         ),
         "campaign_ended": (
             f"🏁 <b>La {BRAND_NAME} Invite Challenge è terminata.</b>\n\n"
@@ -130,7 +142,8 @@ MESSAGES = {
             "Inizia ora a invitare e scala la classifica dei premi 🔥\n\n"
             "📊 Controlla i progressi: /status\n"
             "🎁 Riscatta il premio: /claim\n"
-            "❓ Aiuto: /help"
+            "❓ Aiuto: /help\n\n"
+            "Per ottenere il tuo link invia la parola <b>\"invite\"</b>"
         ),
         "already_has_link": (
             "Ciao {first_name} 👋 Hai già un link di invito! 🔗\n\n"
@@ -141,7 +154,7 @@ MESSAGES = {
         "alt_account_blocked": (
             "⚠️ <b>Non è stato possibile verificare il tuo account.</b>\n\n"
             "Per partecipare alla Invite Challenge, il tuo account Telegram deve avere una foto profilo.\n\n"
-            "Aggiungi una foto profilo e riprova inviando <b>invite</b>."
+            "Aggiungi una foto profilo e riprova inviando <b>\"invite\"</b>."
         ),
         "new_account_blocked": (
             "⚠️ <b>Account nuovo rilevato.</b>\n\n"
@@ -158,7 +171,7 @@ MESSAGES = {
         ),
         "link_removed": (
             "❌ Il tuo link di invito è stato rimosso per inattività.\n\n"
-            "Invia di nuovo <b>invite</b> per ottenere un nuovo link e ricominciare!"
+            "Invia di nuovo <b>\"invite\"</b> per ottenere un nuovo link e ricominciare!"
         ),
         "status": (
             "📊 <b>Le Tue Statistiche</b>\n\n"
@@ -167,7 +180,7 @@ MESSAGES = {
             "Continua a condividere per sbloccare premi migliori!\n"
             f"⏰ Scadenza: {CLAIM_DEADLINE}"
         ),
-        "status_no_link": "Non hai ancora un link di invito. Invia <b>invite</b> per ottenerne uno!",
+        "status_no_link": "Non hai ancora un link di invito. Invia <b>\"invite\"</b> per ottenerne uno!",
         "claim_eligible": (
             "🎁 Complimenti {first_name}! Hai sbloccato <b>{promo}</b>!\n\n"
             "Il tuo codice promo: <code>{code}</code>\n\n"
@@ -186,18 +199,23 @@ MESSAGES = {
         ),
         "help": (
             "❓ <b>Aiuto</b>\n\n"
-            "• Invia <b>invite</b> → ottieni il tuo link di invito unico\n"
+            "• Invia <b>\"invite\"</b> → ottieni il tuo link di invito unico\n"
             "• /status → controlla quante persone si sono unite\n"
             "• /claim → riscatta il tuo premio\n"
             "• /start → cambia lingua\n\n"
             f"🏆 La sfida termina: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "select_language": "Scegli la tua lingua:",
     },
 
     "fr": {
         "language_set": (
             "✅ Langue définie sur <b>Français</b>!\n\n"
-            "Envoyez maintenant le mot <b>invite</b> pour obtenir votre lien d'invitation unique! 🔗"
+            "Envoyez maintenant le mot <b>\"invite\"</b> pour obtenir votre lien d'invitation unique! 🔗"
+        ),
+        "welcome_single": (
+            f"👋 Bienvenue sur <b>{BRAND_NAME}</b>!\n\n"
+            "Envoyez le mot <b>\"invite\"</b> pour obtenir votre lien d'invitation unique! 🔗"
         ),
         "campaign_ended": (
             f"🏁 <b>Le {BRAND_NAME} Invite Challenge est terminé.</b>\n\n"
@@ -224,7 +242,8 @@ MESSAGES = {
             "Commencez à inviter maintenant et grimpez l'échelle des récompenses 🔥\n\n"
             "📊 Vérifiez vos progrès: /status\n"
             "🎁 Réclamez votre récompense: /claim\n"
-            "❓ Aide: /help"
+            "❓ Aide: /help\n\n"
+            "Pour obtenir votre lien envoyez le mot <b>\"invite\"</b>"
         ),
         "already_has_link": (
             "Bonjour {first_name} 👋 Vous avez déjà un lien d'invitation! 🔗\n\n"
@@ -235,7 +254,7 @@ MESSAGES = {
         "alt_account_blocked": (
             "⚠️ <b>Nous n'avons pas pu vérifier votre compte.</b>\n\n"
             "Pour participer au Invite Challenge, votre compte Telegram doit avoir une photo de profil.\n\n"
-            "Veuillez ajouter une photo de profil et réessayer en envoyant <b>invite</b>."
+            "Veuillez ajouter une photo de profil et réessayer en envoyant <b>\"invite\"</b>."
         ),
         "new_account_blocked": (
             "⚠️ <b>Nouveau compte détecté.</b>\n\n"
@@ -252,7 +271,7 @@ MESSAGES = {
         ),
         "link_removed": (
             "❌ Votre lien d'invitation a été supprimé en raison d'inactivité.\n\n"
-            "Envoyez à nouveau <b>invite</b> pour obtenir un nouveau lien et recommencer!"
+            "Envoyez à nouveau <b>\"invite\"</b> pour obtenir un nouveau lien et recommencer!"
         ),
         "status": (
             "📊 <b>Vos Statistiques</b>\n\n"
@@ -261,7 +280,7 @@ MESSAGES = {
             "Continuez à partager pour débloquer de meilleures récompenses!\n"
             f"⏰ Date limite: {CLAIM_DEADLINE}"
         ),
-        "status_no_link": "Vous n'avez pas encore de lien d'invitation. Envoyez <b>invite</b> pour en obtenir un!",
+        "status_no_link": "Vous n'avez pas encore de lien d'invitation. Envoyez <b>\"invite\"</b> pour en obtenir un!",
         "claim_eligible": (
             "🎁 Félicitations {first_name}! Vous avez débloqué <b>{promo}</b>!\n\n"
             "Votre code promo: <code>{code}</code>\n\n"
@@ -280,18 +299,23 @@ MESSAGES = {
         ),
         "help": (
             "❓ <b>Aide</b>\n\n"
-            "• Envoyez <b>invite</b> → obtenez votre lien d'invitation unique\n"
+            "• Envoyez <b>\"invite\"</b> → obtenez votre lien d'invitation unique\n"
             "• /status → vérifiez combien de personnes ont rejoint\n"
             "• /claim → réclamez votre récompense\n"
             "• /start → changer de langue\n\n"
             f"🏆 Le défi se termine: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "select_language": "Choisissez votre langue:",
     },
 
     "mx": {
         "language_set": (
             "✅ Idioma configurado a <b>Español</b>!\n\n"
-            "Ahora envía la palabra <b>invite</b> para obtener tu enlace de invitación único! 🔗"
+            "Ahora envía la palabra <b>\"invite\"</b> para obtener tu enlace de invitación único! 🔗"
+        ),
+        "welcome_single": (
+            f"👋 Bienvenido a <b>{BRAND_NAME}</b>!\n\n"
+            "Envía la palabra <b>\"invite\"</b> para obtener tu enlace de invitación único! 🔗"
         ),
         "campaign_ended": (
             f"🏁 <b>El {BRAND_NAME} Invite Challenge ha terminado.</b>\n\n"
@@ -318,7 +342,8 @@ MESSAGES = {
             "Empieza a invitar ahora y sube la escalera de recompensas 🔥\n\n"
             "📊 Revisa tu progreso: /status\n"
             "🎁 Reclama tu recompensa: /claim\n"
-            "❓ Ayuda: /help"
+            "❓ Ayuda: /help\n\n"
+            "Para obtener tu enlace envía la palabra <b>\"invite\"</b>"
         ),
         "already_has_link": (
             "Hola {first_name} 👋 Ya tienes un enlace de invitación! 🔗\n\n"
@@ -329,7 +354,7 @@ MESSAGES = {
         "alt_account_blocked": (
             "⚠️ <b>No pudimos verificar tu cuenta.</b>\n\n"
             "Para participar en el Invite Challenge, tu cuenta de Telegram debe tener una foto de perfil.\n\n"
-            "Por favor agrega una foto de perfil e intenta de nuevo enviando <b>invite</b>."
+            "Por favor agrega una foto de perfil e intenta de nuevo enviando <b>\"invite\"</b>."
         ),
         "new_account_blocked": (
             "⚠️ <b>Cuenta nueva detectada.</b>\n\n"
@@ -346,7 +371,7 @@ MESSAGES = {
         ),
         "link_removed": (
             "❌ Tu enlace de invitación ha sido eliminado por inactividad.\n\n"
-            "Envía <b>invite</b> de nuevo para obtener un nuevo enlace y empezar de cero!"
+            "Envía <b>\"invite\"</b> de nuevo para obtener un nuevo enlace y empezar de cero!"
         ),
         "status": (
             "📊 <b>Tus Estadísticas</b>\n\n"
@@ -355,7 +380,7 @@ MESSAGES = {
             "Sigue compartiendo para desbloquear mejores recompensas!\n"
             f"⏰ Fecha límite: {CLAIM_DEADLINE}"
         ),
-        "status_no_link": "Todavía no tienes un enlace de invitación. Envía <b>invite</b> para obtener uno!",
+        "status_no_link": "Todavía no tienes un enlace de invitación. Envía <b>\"invite\"</b> para obtener uno!",
         "claim_eligible": (
             "🎁 Felicidades {first_name}! Desbloqueaste <b>{promo}</b>!\n\n"
             "Tu código promo: <code>{code}</code>\n\n"
@@ -374,11 +399,12 @@ MESSAGES = {
         ),
         "help": (
             "❓ <b>Ayuda</b>\n\n"
-            "• Envía <b>invite</b> → obtén tu enlace de invitación único\n"
+            "• Envía <b>\"invite\"</b> → obtén tu enlace de invitación único\n"
             "• /status → revisa cuántas personas se unieron\n"
             "• /claim → reclama tu recompensa\n"
             "• /start → cambiar idioma\n\n"
             f"🏆 El desafío termina: <b>{CLAIM_DEADLINE}</b>"
         ),
+        "select_language": "Elige tu idioma:",
     },
 }
