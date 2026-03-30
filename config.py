@@ -34,7 +34,7 @@ ACTIVE_LANG = "mx"
 # Maximum number of people who can get an invite link
 # Once this limit is reached, new users will be told the campaign is full
 # Set to 0 for unlimited
-MAX_INVITERS = 0
+MAX_INVITERS = 50
 
 # ─── ALT ACCOUNT PROTECTION ──────────────────────────────────
 # True  → block accounts with no profile photo (likely fake/alt accounts)
@@ -55,7 +55,7 @@ CHANNELS = {
     "en": -1002326259934,
     "it": -1003220500138,
     "fr": -1003471986771,
-    "mx": -1003637149020,
+    "mx": -1003765666609,
 }
 
 
