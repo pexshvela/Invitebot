@@ -94,15 +94,22 @@ def get_channel(lang: str) -> int:
 
 
 # ─── Promo tiers ─────────────────────────────────────────────
-# Format: (minimum_invites, promo_code)
-# Replace right side with real codes when ready
+# Format: (minimum_invites, tier_display_name, promo_code)
+#
+#   tier_display_name → shown to the user in notification & /status messages
+#                       (e.g. "🥉 30 Free Spins", "🥈 50 Free Spins")
+#
+#   promo_code        → the actual code the user receives when they /claim
+#                       (e.g. "ROLL30FS", "ROLL50FS")
+#
+# Replace the placeholder codes on the right with your real promo codes.
 PROMO_TIERS = [
-    (1,   "Tier1"),
-    (6,   "Tier2"),
-    (11,  "Tier3"),
-    (31,  "Tier4"),
-    (71,  "Tier5"),
-    (100, "Tier6"),
+    (1,   "🥉 30 Free Spins",   "ROLL30FS"),
+    (6,   "🥈 50 Free Spins",   "ROLL50FS"),
+    (11,  "🥇 100 Free Spins",  "ROLL100FS"),
+    (31,  "💎 200 Free Spins",  "ROLL200FS"),
+    (71,  "🏆 300 Free Spins",  "ROLL300FS"),
+    (100, "👑 500 Free Spins",  "ROLL500FS"),
 ]
 
 # ─── General settings ────────────────────────────────────────
