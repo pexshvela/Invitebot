@@ -311,7 +311,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Invite link failed for {user_id}: {e}")
         await update.message.reply_text(
-            "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment."
+            get_msg(lang, "invite_link_failed"), parse_mode=HTML
         )
 
 
