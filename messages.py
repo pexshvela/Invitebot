@@ -103,6 +103,7 @@ MESSAGES = {
             f"🏆 Invite challenge ends: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment.",
+        "claim_start_dm_first": "👋 To claim your reward privately, you need to start a conversation with the bot first. Click here → @rollettoinvitechallengebot and press <b>Start</b>, then send /claim again.",
         "select_language": (
             "Please choose your language / Scegli la lingua / "
             "Choisissez votre langue / Elige tu idioma:"
@@ -207,6 +208,7 @@ MESSAGES = {
             f"🏆 La sfida termina: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Spiacenti, non è stato possibile creare il tuo link. Riprova tra un momento.",
+        "claim_start_dm_first": "👋 Per riscattare il tuo premio in privato, devi prima avviare una conversazione con il bot. Clicca qui → @rollettoinvitechallengebot e premi <b>Start</b>, poi invia di nuovo /claim.",
         "select_language": "Scegli la tua lingua:",
     },
 
@@ -308,6 +310,7 @@ MESSAGES = {
             f"🏆 Le défi se termine: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Désolé, je n'ai pas pu créer votre lien. Veuillez réessayer dans un moment.",
+        "claim_start_dm_first": "👋 Pour réclamer votre récompense en privé, vous devez d'abord démarrer une conversation avec le bot. Cliquez ici → @rollettoinvitechallengebot et appuyez sur <b>Start</b>, puis envoyez à nouveau /claim.",
         "select_language": "Choisissez votre langue:",
     },
 
@@ -409,6 +412,7 @@ MESSAGES = {
             f"🏆 El desafío termina: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Lo siento, no pude crear tu enlace ahora mismo. Por favor intenta de nuevo en un momento.",
+        "claim_start_dm_first": "👋 Para reclamar tu recompensa en privado, primero debes iniciar una conversación con el bot. Haz clic aquí → @rollettoinvitechallengebot y presiona <b>Start</b>, luego envía /claim de nuevo.",
         "select_language": "Elige tu idioma:",
     },
 }
