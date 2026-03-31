@@ -121,11 +121,12 @@ def build_language_picker() -> InlineKeyboardMarkup:
 def build_multi_lang_greeting() -> str:
     """
     Builds a combined greeting for MODE 1 and MODE 2.
-    Each active language contributes its own greeting line, separated by a divider.
+    Shows the brand name + language selection prompt in each active language.
     """
     active = get_active_langs()
-    parts = [get_msg(lang, "select_language_prompt") for lang in active]
-    return "\n\n".join(parts)
+    parts = [get_msg(lang, "select_language") for lang in active]
+    header = f"👋 Welcome to <b>{BRAND_NAME}</b>!\n\n"
+    return header + " / ".join(parts)
 
 
 async def has_profile_photo(bot, user_id: int) -> bool:
