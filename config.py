@@ -53,7 +53,7 @@ MIN_ACCOUNT_AGE_HOURS = 24
 # ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
     "en": -1002326259934,
-    "it": -1003220500138,
+    "it": -1003255978169,
     "fr": -1003471986771,
     "mx": -1003765666609,
 }
