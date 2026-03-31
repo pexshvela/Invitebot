@@ -90,18 +90,11 @@ def get_forced_lang() -> str | None:
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
 
-def get_promo_for_count(count: int) -> tuple[str, str] | None:
-    """
-    Returns (tier_display_name, promo_code) for the highest unlocked tier,
-    or None if the user hasn't reached any tier yet.
-
-    tier_display_name → shown to the user in messages  (e.g. "🥉 30 Free Spins")
-    promo_code        → the actual code sent on /claim  (e.g. "ROLL30FS")
-    """
+def get_promo_for_count(count: int):
     current = None
-    for min_count, tier_name, promo_code in PROMO_TIERS:
+    for min_count, promo_name in PROMO_TIERS:
         if count >= min_count:
-            current = (tier_name, promo_code)
+            current = promo_name
     return current
 
 
@@ -399,12 +392,10 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     count = sheets.get_invite_count(user_id)
-    result = get_promo_for_count(count)
-    # Show tier display name only (not the promo code) in /status
-    promo_display = result[0] if result else "—"
+    promo = get_promo_for_count(count) or "—"
 
     await update.message.reply_text(
-        fmt(get_msg(lang, "status"), first_name=first_name, count=count, promo=promo_display),
+        fmt(get_msg(lang, "status"), first_name=first_name, count=count, promo=promo),
         parse_mode=HTML,
     )
 
@@ -418,6 +409,43 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name or "there"
     lang = get_forced_lang() or sheets.get_user_language(user_id) or "en"
 
+    # ── Block claim in group chats — send code only via DM ───────────────────
+    if update.effective_chat.type != "private":
+        try:
+            already = sheets.get_claimed_promo(user_id)
+            count = sheets.get_invite_count(user_id)
+            promo_name = get_promo_for_count(count)
+
+            if already:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=fmt(get_msg(lang, "claim_already"), code=already),
+                    parse_mode=HTML,
+                )
+            elif not promo_name:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=get_msg(lang, "claim_not_eligible"),
+                    parse_mode=HTML,
+                )
+            else:
+                promo_code = promo_name
+                sheets.save_claim(user_id, username, promo_name, promo_code)
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=fmt(get_msg(lang, "claim_eligible"), first_name=first_name,
+                             promo=promo_name, code=promo_code),
+                    parse_mode=HTML,
+                )
+                logger.info(f"{username} ({user_id}) claimed {promo_name} (via group)")
+        except Exception as e:
+            logger.warning(f"Could not send claim DM to {user_id}: {e}")
+            # Notify publicly in the group — no promo code exposed
+            await update.message.reply_text(
+                get_msg(lang, "claim_start_dm_first"), parse_mode=HTML
+            )
+
+    # ── Normal DM flow ────────────────────────────────────────────────────────
     already = sheets.get_claimed_promo(user_id)
     if already:
         await update.message.reply_text(
@@ -426,21 +454,21 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     count = sheets.get_invite_count(user_id)
-    result = get_promo_for_count(count)
+    promo_name = get_promo_for_count(count)
 
-    if not result:
+    if not promo_name:
         await update.message.reply_text(get_msg(lang, "claim_not_eligible"), parse_mode=HTML)
         return
 
-    tier_name, promo_code = result  # tier_name shown in message, promo_code stored & shown
-    sheets.save_claim(user_id, username, tier_name, promo_code)
+    promo_code = promo_name  # ← replace with real codes in config.py
+    sheets.save_claim(user_id, username, promo_name, promo_code)
 
     await update.message.reply_text(
         fmt(get_msg(lang, "claim_eligible"), first_name=first_name,
-            promo=tier_name, code=promo_code),
+            promo=promo_name, code=promo_code),
         parse_mode=HTML,
     )
-    logger.info(f"{username} ({user_id}) claimed tier '{tier_name}' → code '{promo_code}'")
+    logger.info(f"{username} ({user_id}) claimed {promo_name}")
 
 
 # ─── /help ───────────────────────────────────────────────────────────────────
@@ -527,18 +555,16 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thresholds = {t[0] for t in PROMO_TIERS}
     if new_count in thresholds:
         lang = get_forced_lang() or sheets.get_user_language(owner_id) or "en"
-        tier_result = get_promo_for_count(new_count)
-        if tier_result:
-            tier_name, _ = tier_result  # only the display name goes in the notification
-            try:
-                await context.bot.send_message(
-                    chat_id=owner_id,
-                    text=fmt(get_msg(lang, "threshold_reached"),
-                             promo=tier_name, deadline=CLAIM_DEADLINE),
-                    parse_mode=HTML,
-                )
-            except Exception as e:
-                logger.warning(f"Could not notify {owner_id}: {e}")
+        promo = get_promo_for_count(new_count)
+        try:
+            await context.bot.send_message(
+                chat_id=owner_id,
+                text=fmt(get_msg(lang, "threshold_reached"),
+                         promo=promo, deadline=CLAIM_DEADLINE),
+                parse_mode=HTML,
+            )
+        except Exception as e:
+            logger.warning(f"Could not notify {owner_id}: {e}")
 
 
 # ─── Admin ────────────────────────────────────────────────────────────────────
