@@ -28,7 +28,7 @@ CAMPAIGN_ACTIVE = True
 #                    greeting shown in all selected languages
 #                    example with 3: ["en", "it", "mx"]
 #
-ACTIVE_LANG = "mx"
+ACTIVE_LANG = "it", "mx"
 
 # ─── MAX INVITERS ────────────────────────────────────────────
 # Maximum number of people who can get an invite link
