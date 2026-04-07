@@ -28,7 +28,7 @@ CAMPAIGN_ACTIVE = True
 #                    greeting shown in all selected languages
 #                    example with 3: ["en", "it", "mx"]
 #
-ACTIVE_LANG = ["it", "mx"]
+ACTIVE_LANG = "en"
 
 # ─── MAX INVITERS ────────────────────────────────────────────
 # Maximum number of people who can get an invite link
@@ -52,7 +52,7 @@ MIN_ACCOUNT_AGE_HOURS = 24
 
 # ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
-    "en": -1002326259934,
+    "en": -1002464292560,
     "it": -1003255978169,
     "fr": -1003471986771,
     "mx": -1003765666609,
