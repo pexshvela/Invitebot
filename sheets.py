@@ -9,7 +9,7 @@ import os
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -62,6 +62,9 @@ def setup_sheets():
                       "invite_link", "date_joined", "invite_count"],
         "Joins":     ["invited_user_id", "invited_username", "invited_full_name",
                       "inviter_user_id", "invite_link", "joined_at"],
+        "Pending":   ["invited_user_id", "invited_username", "invited_full_name",
+                      "inviter_user_id", "invite_link", "joined_at",
+                      "bot_started", "channel_id"],
         "Claims":    ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
         "Stats":     ["user_id", "username", "language", "invite_count", "last_updated"],
         "FirstSeen": ["user_id", "first_seen_at"],
@@ -97,8 +100,7 @@ def _with_retry(fn, retries: int = 3, base_delay: float = 2.0):
     """
     Calls fn() up to `retries` times with exponential backoff.
     Raises the last exception if all attempts fail.
-
-    Delays: 2s → 4s → 8s  (base_delay * 2^attempt)
+    Delays: 2s → 4s → 8s
     """
     last_exc = None
     for attempt in range(retries):
@@ -211,7 +213,6 @@ def increment_invite_count(user_id: int) -> int:
         ws, row = _get_member_row(user_id)
         if row is None:
             return 0
-
         new_count = get_invite_count(user_id) + 1
         ws.update_cell(row, 7, new_count)
 
@@ -239,28 +240,146 @@ def increment_invite_count(user_id: int) -> int:
         return 0
 
 
-# ─── Joins (fraud prevention) ─────────────────────────────────────────────────
+# ─── Joins (confirmed invites) ───────────────────────────────────────────────
 
 def has_already_joined(invited_user_id: int, inviter_user_id: int) -> bool:
-    """Returns True if this (invited, inviter) pair already exists — blocks rejoin fraud."""
+    """
+    Returns True if this (invited, inviter) pair already exists in Joins OR Pending.
+    Prevents the same person being counted twice.
+    """
+    # Check confirmed Joins
     ws = get_worksheet("Joins")
     try:
         all_rows = ws.get_all_values()
-        for row in all_rows[1:]:  # skip header
+        for row in all_rows[1:]:
             if len(row) >= 4 and row[0] == str(invited_user_id) and row[3] == str(inviter_user_id):
                 return True
     except Exception as e:
-        logger.warning(f"has_already_joined check failed: {e}")
+        logger.warning(f"has_already_joined (Joins) check failed: {e}")
+
+    # Also check Pending
+    if is_already_pending(invited_user_id, inviter_user_id):
+        return True
+
     return False
 
 
 def record_join(invited_user_id: int, invited_username: str, invited_full_name: str,
                 inviter_user_id: int, invite_link: str):
-    """Log a valid new join."""
+    """Log a confirmed valid join to the Joins sheet."""
     ws = get_worksheet("Joins")
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     ws.append_row([str(invited_user_id), invited_username, invited_full_name,
                    str(inviter_user_id), invite_link, now])
+
+
+# ─── Pending (unconfirmed joins awaiting hold period + bot start) ─────────────
+#
+#  Pending sheet columns:
+#  1: invited_user_id
+#  2: invited_username
+#  3: invited_full_name
+#  4: inviter_user_id
+#  5: invite_link
+#  6: joined_at
+#  7: bot_started   ("True" / "False")
+#  8: channel_id
+
+def save_pending_join(invited_user_id: int, invited_username: str, invited_full_name: str,
+                      inviter_user_id: int, invite_link: str, channel_id: int):
+    """Save a new join to the Pending sheet to await confirmation."""
+    ws = get_worksheet("Pending")
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    ws.append_row([
+        str(invited_user_id), invited_username, invited_full_name,
+        str(inviter_user_id), invite_link, now, "False", str(channel_id)
+    ])
+    logger.info(f"Pending join saved: {invited_user_id} invited by {inviter_user_id}")
+
+
+def is_already_pending(invited_user_id: int, inviter_user_id: int) -> bool:
+    """Returns True if this (invited, inviter) pair is already in Pending."""
+    ws = get_worksheet("Pending")
+    try:
+        all_rows = ws.get_all_values()
+        for row in all_rows[1:]:
+            if len(row) >= 4 and row[0] == str(invited_user_id) and row[3] == str(inviter_user_id):
+                return True
+    except Exception as e:
+        logger.warning(f"is_already_pending check failed: {e}")
+    return False
+
+
+def mark_bot_started(user_id: int) -> bool:
+    """
+    Marks bot_started = True for this user in the Pending sheet.
+    Called when the invited user sends /start to the bot.
+    Returns True if the user was found in Pending, False otherwise.
+    """
+    ws = get_worksheet("Pending")
+    cell = _find_cell(ws, str(user_id), in_column=1)
+    if cell is None:
+        return False
+    ws.update_cell(cell.row, 7, "True")
+    logger.info(f"bot_started marked True for pending user {user_id}")
+    return True
+
+
+def count_pending_for_inviter(inviter_user_id: int) -> int:
+    """Returns how many pending joins exist for a given inviter."""
+    ws = get_worksheet("Pending")
+    try:
+        all_rows = ws.get_all_values()
+        return sum(
+            1 for row in all_rows[1:]
+            if len(row) >= 4 and row[3] == str(inviter_user_id)
+        )
+    except Exception as e:
+        logger.warning(f"count_pending_for_inviter failed: {e}")
+        return 0
+
+
+def get_ready_pending(hold_hours: int) -> list:
+    """
+    Returns all pending rows whose hold period has expired.
+    Each entry is a dict with all row data plus the actual row_num for deletion.
+    Sorted by row_num descending so we can safely delete without shifting.
+    """
+    ws = get_worksheet("Pending")
+    ready = []
+    try:
+        all_rows = ws.get_all_values()
+        cutoff = datetime.utcnow() - timedelta(hours=hold_hours)
+        for i, row in enumerate(all_rows[1:], start=2):  # row 1 is header, data starts at 2
+            if len(row) < 8:
+                continue
+            try:
+                joined_at = datetime.strptime(row[5], "%Y-%m-%d %H:%M:%S")
+                if joined_at <= cutoff:
+                    ready.append({
+                        "row_num":           i,
+                        "invited_user_id":   int(row[0]),
+                        "invited_username":  row[1],
+                        "invited_full_name": row[2],
+                        "inviter_user_id":   int(row[3]),
+                        "invite_link":       row[4],
+                        "joined_at":         joined_at,
+                        "bot_started":       row[6] == "True",
+                        "channel_id":        int(row[7]),
+                    })
+            except Exception as e:
+                logger.warning(f"Error parsing pending row {i}: {e}")
+    except Exception as e:
+        logger.warning(f"get_ready_pending failed: {e}")
+
+    # Sort descending so deletions don't shift remaining row numbers
+    return sorted(ready, key=lambda x: x["row_num"], reverse=True)
+
+
+def remove_pending_row(row_num: int):
+    """Delete a specific row from the Pending sheet by row number."""
+    ws = get_worksheet("Pending")
+    ws.delete_rows(row_num)
 
 
 # ─── First Seen (account age fraud prevention) ───────────────────────────────
@@ -279,9 +398,7 @@ def record_first_seen(user_id: int):
 
 
 def get_first_seen(user_id: int) -> datetime | None:
-    """
-    Returns the datetime when this user_id was first seen, or None if unknown.
-    """
+    """Returns the datetime when this user_id was first seen, or None if unknown."""
     ws = get_worksheet("FirstSeen")
     cell = _find_cell(ws, str(user_id), in_column=1)
     if cell is None:
@@ -320,6 +437,9 @@ def reset_all_data():
                       "invite_link", "date_joined", "invite_count"],
         "Joins":     ["invited_user_id", "invited_username", "invited_full_name",
                       "inviter_user_id", "invite_link", "joined_at"],
+        "Pending":   ["invited_user_id", "invited_username", "invited_full_name",
+                      "inviter_user_id", "invite_link", "joined_at",
+                      "bot_started", "channel_id"],
         "Claims":    ["user_id", "username", "promo_name", "promo_code", "date_claimed"],
         "Stats":     ["user_id", "username", "language", "invite_count", "last_updated"],
         "FirstSeen": ["user_id", "first_seen_at"],
