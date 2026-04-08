@@ -112,12 +112,12 @@ def get_channel(lang: str) -> int:
 #                       (e.g. "ROLL30FS")
 #
 PROMO_TIERS = [
-    (1,   "🥉 30 Free Spins",   "ROLL30FS"),
-    (6,   "🥈 50 Free Spins",   "ROLL50FS"),
-    (11,  "🥇 100 Free Spins",  "ROLL100FS"),
-    (31,  "💎 200 Free Spins",  "ROLL200FS"),
-    (71,  "🏆 300 Free Spins",  "ROLL300FS"),
-    (100, "👑 500 Free Spins",  "ROLL500FS"),
+    (1,   "🥉 30 Free Spins",   "AJDIWW"),
+    (6,   "🥈 50 Free Spins",   "PPEKCD"),
+    (11,  "🥇 100 Free Spins",  "IIKLDS"),
+    (31,  "💎 200 Free Spins",  "LSPWPP"),
+    (71,  "🏆 300 Free Spins",  "MMDOWE"),
+    (100, "👑 500 Free Spins",  "QQKLOE"),
 ]
 
 # ─── General settings ────────────────────────────────────────
