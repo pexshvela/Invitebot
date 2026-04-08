@@ -23,7 +23,7 @@ import sheets
 from config import (
     PROMO_TIERS, CLAIM_DEADLINE, BRAND_NAME,
     CAMPAIGN_ACTIVE, MAX_INVITERS, CHECK_PROFILE_PHOTO,
-    CHECK_ACCOUNT_AGE, MIN_ACCOUNT_AGE_HOURS,
+    CHECK_ACCOUNT_AGE, MIN_ACCOUNT_AGE_HOURS, INVITE_HOLD_HOURS,
     ACTIVE_LANG, get_channel,
 )
 from messages import MESSAGES
@@ -49,40 +49,22 @@ LANG_BUTTONS = {
     "mx": "🇲🇽 Español",
 }
 
+
 # ─── ACTIVE_LANG mode helpers ─────────────────────────────────────────────────
-#
-#  ACTIVE_LANG in config.py can be set to one of three forms:
-#
-#  MODE 1 — "all"
-#    All 4 languages active. User sees a picker with all 4 buttons.
-#    Example:  ACTIVE_LANG = "all"
-#
-#  MODE 2 — a list of 2+ language codes
-#    Only those languages active. User sees a picker with just those buttons.
-#    Bot greets in all selected languages.
-#    Example:  ACTIVE_LANG = ["mx", "fr"]
-#
-#  MODE 3 — a single language code string
-#    Only that language active. No picker shown at all.
-#    Bot greets and operates entirely in that language.
-#    Example:  ACTIVE_LANG = "mx"
 
 def get_active_langs() -> list[str]:
-    """Returns the list of active language codes from the ACTIVE_LANG setting."""
     if ACTIVE_LANG == "all":
         return ["en", "it", "fr", "mx"]
     if isinstance(ACTIVE_LANG, list):
         return list(ACTIVE_LANG)
-    return [ACTIVE_LANG]  # single string
+    return [ACTIVE_LANG]
 
 
 def is_single_lang() -> bool:
-    """True when exactly one language is active — no picker needed."""
     return len(get_active_langs()) == 1
 
 
 def get_forced_lang() -> str | None:
-    """Returns the forced language code in single-lang mode, else None."""
     if is_single_lang():
         return get_active_langs()[0]
     return None
@@ -90,11 +72,15 @@ def get_forced_lang() -> str | None:
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
 
-def get_promo_for_count(count: int):
+def get_promo_for_count(count: int) -> tuple[str, str] | None:
+    """
+    Returns (tier_display_name, promo_code) for the highest unlocked tier,
+    or None if the user hasn't reached any tier yet.
+    """
     current = None
-    for min_count, promo_name in PROMO_TIERS:
+    for min_count, tier_name, promo_code in PROMO_TIERS:
         if count >= min_count:
-            current = promo_name
+            current = (tier_name, promo_code)
     return current
 
 
@@ -108,7 +94,6 @@ def fmt(template: str, **kwargs) -> str:
 
 
 def build_language_picker() -> InlineKeyboardMarkup:
-    """Builds the inline language picker using only the currently active languages."""
     active = get_active_langs()
     buttons = [
         InlineKeyboardButton(LANG_BUTTONS[l], callback_data=f"lang_{l}")
@@ -119,14 +104,9 @@ def build_language_picker() -> InlineKeyboardMarkup:
 
 
 def build_multi_lang_greeting() -> str:
-    """
-    Builds a combined greeting for MODE 1 and MODE 2.
-    Shows the brand name + language selection prompt in each active language.
-    """
     active = get_active_langs()
-    parts = [get_msg(lang, "select_language") for lang in active]
-    header = f"👋 Welcome to <b>{BRAND_NAME}</b>!\n\n"
-    return header + " / ".join(parts)
+    parts = [get_msg(lang, "select_language_prompt") for lang in active]
+    return "\n\n".join(parts)
 
 
 async def has_profile_photo(bot, user_id: int) -> bool:
@@ -178,6 +158,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sheets.record_first_seen(user.id)
 
+    # ── Mark bot_started in Pending if this user was invited ─────────────────
+    # This is the proof that the invited user actually engaged with the bot
+    sheets.mark_bot_started(user.id)
+
     # ── Campaign ended ────────────────────────────────────────────────────────
     if not CAMPAIGN_ACTIVE:
         lang = get_forced_lang() or sheets.get_user_language(user.id) or "en"
@@ -222,7 +206,6 @@ INVITE_TRIGGER_WORDS = {
     "fr": ("inviter",  '"inviter"'),
     "mx": ("invitar",  '"invitar"'),
 }
-# Flat set of all accepted words across all languages
 ALL_INVITE_TRIGGERS = {w for words in INVITE_TRIGGER_WORDS.values() for w in words}
 
 
@@ -244,11 +227,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ── Resolve language ──────────────────────────────────────────────────────
     if is_single_lang():
-        # MODE 3: force the active language, no selection needed
         lang = get_forced_lang()
         sheets.set_user_language(user_id, lang)
     else:
-        # MODE 1 & 2: user must have already picked a language via /start
         lang = sheets.get_user_language(user_id)
         if not lang:
             await update.message.reply_text(
@@ -278,7 +259,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"Max inviters reached ({MAX_INVITERS}). Blocked {username} ({user_id})")
             return
 
-    # ── Alt account check ────────────────────────────────────────────────────
+    # ── Alt account check ─────────────────────────────────────────────────────
     if CHECK_PROFILE_PHOTO:
         has_photo = await has_profile_photo(context.bot, user_id)
         if not has_photo:
@@ -380,6 +361,97 @@ async def remove_inactive_link(context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Could not notify {user_id} of removal: {e}")
 
 
+# ─── Pending confirmation job (runs every hour) ───────────────────────────────
+
+async def process_pending_joins(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Runs every hour. Checks all pending joins whose hold period has expired.
+    For each one:
+      - If bot_started=True AND still in channel → confirm, count, notify inviter
+      - Otherwise → discard silently
+    Rows are deleted after processing (in reverse order to avoid row shifting).
+    """
+    ready = sheets.get_ready_pending(INVITE_HOLD_HOURS)
+    if not ready:
+        logger.info("process_pending_joins: nothing ready.")
+        return
+
+    logger.info(f"process_pending_joins: processing {len(ready)} expired pending rows.")
+
+    for entry in ready:  # already sorted descending by row_num
+        invited_user_id  = entry["invited_user_id"]
+        inviter_user_id  = entry["inviter_user_id"]
+        channel_id       = entry["channel_id"]
+        confirmed        = False
+
+        if entry["bot_started"]:
+            # Check if the invited user is still in the channel
+            try:
+                member = await context.bot.get_chat_member(
+                    chat_id=channel_id,
+                    user_id=invited_user_id,
+                )
+                if member.status in ("member", "administrator", "creator"):
+                    confirmed = True
+                else:
+                    logger.info(
+                        f"Pending discarded: {invited_user_id} left the channel "
+                        f"(status={member.status})"
+                    )
+            except Exception as e:
+                # Can't check membership — skip this row for now, retry next hour
+                logger.warning(
+                    f"Could not check membership for {invited_user_id}: {e} — skipping."
+                )
+                continue
+        else:
+            logger.info(
+                f"Pending discarded: {invited_user_id} never started the bot."
+            )
+
+        # Remove from Pending sheet
+        try:
+            sheets.remove_pending_row(entry["row_num"])
+        except Exception as e:
+            logger.warning(f"Could not remove pending row {entry['row_num']}: {e}")
+            continue
+
+        if confirmed:
+            # Move to Joins and credit the inviter
+            sheets.record_join(
+                invited_user_id=invited_user_id,
+                invited_username=entry["invited_username"],
+                invited_full_name=entry["invited_full_name"],
+                inviter_user_id=inviter_user_id,
+                invite_link=entry["invite_link"],
+            )
+            new_count = sheets.increment_invite_count(inviter_user_id)
+            logger.info(
+                f"Invite confirmed: {invited_user_id} → inviter {inviter_user_id}, "
+                f"new count: {new_count}"
+            )
+
+            # Notify inviter of tier unlock if threshold hit
+            thresholds = {t[0] for t in PROMO_TIERS}
+            if new_count in thresholds:
+                lang = get_forced_lang() or sheets.get_user_language(inviter_user_id) or "en"
+                tier_result = get_promo_for_count(new_count)
+                if tier_result:
+                    tier_name, _ = tier_result
+                    try:
+                        await context.bot.send_message(
+                            chat_id=inviter_user_id,
+                            text=fmt(
+                                get_msg(lang, "threshold_reached"),
+                                promo=tier_name,
+                                deadline=CLAIM_DEADLINE,
+                            ),
+                            parse_mode=HTML,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not notify inviter {inviter_user_id}: {e}")
+
+
 # ─── /status ─────────────────────────────────────────────────────────────────
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -393,10 +465,11 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     count = sheets.get_invite_count(user_id)
-    promo = get_promo_for_count(count) or "—"
+    result = get_promo_for_count(count)
+    promo_display = result[0] if result else "—"
 
     await update.message.reply_text(
-        fmt(get_msg(lang, "status"), first_name=first_name, count=count, promo=promo),
+        fmt(get_msg(lang, "status"), first_name=first_name, count=count, promo=promo_display),
         parse_mode=HTML,
     )
 
@@ -410,43 +483,6 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name or "there"
     lang = get_forced_lang() or sheets.get_user_language(user_id) or "en"
 
-    # ── Block claim in group chats — send code only via DM ───────────────────
-    if update.effective_chat.type != "private":
-        try:
-            already = sheets.get_claimed_promo(user_id)
-            count = sheets.get_invite_count(user_id)
-            promo_name = get_promo_for_count(count)
-
-            if already:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=fmt(get_msg(lang, "claim_already"), code=already),
-                    parse_mode=HTML,
-                )
-            elif not promo_name:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=get_msg(lang, "claim_not_eligible"),
-                    parse_mode=HTML,
-                )
-            else:
-                promo_code = promo_name
-                sheets.save_claim(user_id, username, promo_name, promo_code)
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=fmt(get_msg(lang, "claim_eligible"), first_name=first_name,
-                             promo=promo_name, code=promo_code),
-                    parse_mode=HTML,
-                )
-                logger.info(f"{username} ({user_id}) claimed {promo_name} (via group)")
-        except Exception as e:
-            logger.warning(f"Could not send claim DM to {user_id}: {e}")
-            # Notify publicly in the group — no promo code exposed
-            await update.message.reply_text(
-                get_msg(lang, "claim_start_dm_first"), parse_mode=HTML
-            )
-
-    # ── Normal DM flow ────────────────────────────────────────────────────────
     already = sheets.get_claimed_promo(user_id)
     if already:
         await update.message.reply_text(
@@ -455,21 +491,21 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     count = sheets.get_invite_count(user_id)
-    promo_name = get_promo_for_count(count)
+    result = get_promo_for_count(count)
 
-    if not promo_name:
+    if not result:
         await update.message.reply_text(get_msg(lang, "claim_not_eligible"), parse_mode=HTML)
         return
 
-    promo_code = promo_name  # ← replace with real codes in config.py
-    sheets.save_claim(user_id, username, promo_name, promo_code)
+    tier_name, promo_code = result
+    sheets.save_claim(user_id, username, tier_name, promo_code)
 
     await update.message.reply_text(
         fmt(get_msg(lang, "claim_eligible"), first_name=first_name,
-            promo=promo_name, code=promo_code),
+            promo=tier_name, code=promo_code),
         parse_mode=HTML,
     )
-    logger.info(f"{username} ({user_id}) claimed {promo_name}")
+    logger.info(f"{username} ({user_id}) claimed tier '{tier_name}' → code '{promo_code}'")
 
 
 # ─── /help ───────────────────────────────────────────────────────────────────
@@ -486,7 +522,7 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not result:
         return
 
-    joined = result.new_chat_member.status in ("member", "administrator", "creator")
+    joined     = result.new_chat_member.status in ("member", "administrator", "creator")
     was_outside = result.old_chat_member.status in ("left", "kicked", "restricted")
 
     if not (joined and was_outside):
@@ -496,14 +532,15 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not invite_link_obj:
         return
 
-    invited_user = result.new_chat_member.user
-    invited_user_id = invited_user.id
-    invited_username = invited_user.username or invited_user.first_name or "unknown"
+    invited_user      = result.new_chat_member.user
+    invited_user_id   = invited_user.id
+    invited_username  = invited_user.username or invited_user.first_name or "unknown"
     invited_full_name = (
         f"{invited_user.first_name or ''} {invited_user.last_name or ''}".strip()
         or invited_username
     )
-    link_url = invite_link_obj.invite_link
+    link_url   = invite_link_obj.invite_link
+    channel_id = result.chat.id
 
     owner_id = sheets.get_link_owner(link_url)
     if not owner_id:
@@ -514,9 +551,11 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Self-invite blocked: {invited_user_id}")
         return
 
-    # ── Fraud: rejoin ─────────────────────────────────────────────────────────
+    # ── Fraud: already joined or already pending ──────────────────────────────
     if sheets.has_already_joined(invited_user_id, owner_id):
-        logger.warning(f"Rejoin blocked: {invited_user_id} already counted for {owner_id}")
+        logger.warning(
+            f"Duplicate blocked: {invited_user_id} already in Joins or Pending for {owner_id}"
+        )
         return
 
     # ── Fraud: new account age ────────────────────────────────────────────────
@@ -542,30 +581,34 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"Could not notify inviter {owner_id}: {e}")
             return
 
-    # ── Valid join ────────────────────────────────────────────────────────────
-    sheets.record_join(
+    # ── Save to Pending (hold period starts now) ──────────────────────────────
+    # Check if this is the inviter's very first pending join
+    pending_before = sheets.count_pending_for_inviter(owner_id)
+
+    sheets.save_pending_join(
         invited_user_id=invited_user_id,
         invited_username=invited_username,
         invited_full_name=invited_full_name,
         inviter_user_id=owner_id,
         invite_link=link_url,
+        channel_id=channel_id,
     )
-    new_count = sheets.increment_invite_count(owner_id)
-    logger.info(f"Valid join recorded. Inviter {owner_id} now has {new_count} invites.")
+    logger.info(
+        f"Join saved to Pending: {invited_user_id} invited by {owner_id}. "
+        f"Will confirm in {INVITE_HOLD_HOURS}h if they start the bot and stay."
+    )
 
-    thresholds = {t[0] for t in PROMO_TIERS}
-    if new_count in thresholds:
-        lang = get_forced_lang() or sheets.get_user_language(owner_id) or "en"
-        promo = get_promo_for_count(new_count)
+    # ── First pending join: remind inviter of the rules ───────────────────────
+    if pending_before == 0:
+        inviter_lang = get_forced_lang() or sheets.get_user_language(owner_id) or "en"
         try:
             await context.bot.send_message(
                 chat_id=owner_id,
-                text=fmt(get_msg(lang, "threshold_reached"),
-                         promo=promo, deadline=CLAIM_DEADLINE),
+                text=get_msg(inviter_lang, "first_join_reminder"),
                 parse_mode=HTML,
             )
         except Exception as e:
-            logger.warning(f"Could not notify {owner_id}: {e}")
+            logger.warning(f"Could not send first_join_reminder to {owner_id}: {e}")
 
 
 # ─── Admin ────────────────────────────────────────────────────────────────────
@@ -577,6 +620,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         members = sheets.get_worksheet("Members").get_all_values()
         claims  = sheets.get_worksheet("Claims").get_all_values()
         joins   = sheets.get_worksheet("Joins").get_all_values()
+        pending = sheets.get_worksheet("Pending").get_all_values()
         active  = sheets.count_active_inviters()
         limit_text = f"{MAX_INVITERS}" if MAX_INVITERS > 0 else "Unlimited"
 
@@ -584,10 +628,12 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 <b>Admin Stats</b>\n\n"
             f"👥 Total members: <b>{max(0, len(members)-1)}</b>\n"
             f"🔗 Active inviters: <b>{active}</b> / {limit_text}\n"
-            f"📥 Total joins logged: <b>{max(0, len(joins)-1)}</b>\n"
+            f"📥 Confirmed joins: <b>{max(0, len(joins)-1)}</b>\n"
+            f"⏳ Pending joins: <b>{max(0, len(pending)-1)}</b>\n"
             f"🎁 Total claims: <b>{max(0, len(claims)-1)}</b>\n\n"
             f"🟢 Campaign active: <b>{'Yes' if CAMPAIGN_ACTIVE else 'No'}</b>\n"
-            f"🌍 Active language(s): <b>{ACTIVE_LANG}</b>",
+            f"🌍 Active language(s): <b>{ACTIVE_LANG}</b>\n"
+            f"⏰ Hold period: <b>{INVITE_HOLD_HOURS}h</b>",
             parse_mode=HTML,
         )
     except Exception as e:
@@ -602,6 +648,7 @@ async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "This will permanently delete <b>ALL</b> data:\n"
         "• All members &amp; invite links\n"
         "• All join records\n"
+        "• All pending joins\n"
         "• All claims\n"
         "• All stats\n"
         "• All first-seen records\n\n"
@@ -623,6 +670,7 @@ async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
             "All sheets have been wiped and are ready for a new campaign.\n\n"
             "• Members → cleared\n"
             "• Joins → cleared\n"
+            "• Pending → cleared\n"
             "• Claims → cleared\n"
             "• Stats → cleared\n"
             "• FirstSeen → cleared",
@@ -640,7 +688,8 @@ def main():
     logger.info(
         f"Campaign active: {CAMPAIGN_ACTIVE} | Active lang: {ACTIVE_LANG} | "
         f"Max inviters: {MAX_INVITERS} | Photo check: {CHECK_PROFILE_PHOTO} | "
-        f"Account age check: {CHECK_ACCOUNT_AGE} (min {MIN_ACCOUNT_AGE_HOURS}h)"
+        f"Account age check: {CHECK_ACCOUNT_AGE} (min {MIN_ACCOUNT_AGE_HOURS}h) | "
+        f"Invite hold: {INVITE_HOLD_HOURS}h"
     )
 
     try:
@@ -662,6 +711,14 @@ def main():
     app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang_"))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_message))
     app.add_handler(ChatMemberHandler(track_new_member, ChatMemberHandler.CHAT_MEMBER))
+
+    # ── Hourly job: confirm or discard pending joins ──────────────────────────
+    app.job_queue.run_repeating(
+        process_pending_joins,
+        interval=3600,   # every hour
+        first=60,        # first run 60 seconds after startup
+        name="pending_confirmation",
+    )
 
     logger.info("Bot polling started.")
     app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
