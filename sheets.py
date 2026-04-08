@@ -8,6 +8,7 @@
 import os
 import json
 import logging
+import time
 from datetime import datetime
 
 import gspread
@@ -88,6 +89,30 @@ def _find_cell(ws, value: str, in_column: int):
         return ws.find(value, in_column=in_column)
     except Exception:
         return None
+
+
+# ─── Retry helper ─────────────────────────────────────────────────────────────
+
+def _with_retry(fn, retries: int = 3, base_delay: float = 2.0):
+    """
+    Calls fn() up to `retries` times with exponential backoff.
+    Raises the last exception if all attempts fail.
+
+    Delays: 2s → 4s → 8s  (base_delay * 2^attempt)
+    """
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            wait = base_delay * (2 ** attempt)
+            logger.warning(
+                f"Sheets API error (attempt {attempt + 1}/{retries}): {e} — "
+                f"retrying in {wait:.0f}s"
+            )
+            time.sleep(wait)
+    raise last_exc
 
 
 # ─── Members ─────────────────────────────────────────────────────────────────
@@ -177,27 +202,41 @@ def get_invite_count(user_id: int) -> int:
 
 
 def increment_invite_count(user_id: int) -> int:
-    ws, row = _get_member_row(user_id)
-    if row is None:
-        return 0
-    new_count = get_invite_count(user_id) + 1
-    ws.update_cell(row, 7, new_count)
+    """
+    Increments the invite count for user_id with retry logic.
+    Retries up to 3 times with exponential backoff (2s, 4s, 8s)
+    to handle Google Sheets API rate limits during join bursts.
+    """
+    def _do_increment():
+        ws, row = _get_member_row(user_id)
+        if row is None:
+            return 0
 
-    # Mirror to Stats tab
+        new_count = get_invite_count(user_id) + 1
+        ws.update_cell(row, 7, new_count)
+
+        # Mirror to Stats tab
+        try:
+            username = ws.cell(row, 2).value or ""
+            lang = ws.cell(row, 4).value or ""
+            stats_ws = get_worksheet("Stats")
+            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            c = _find_cell(stats_ws, str(user_id), in_column=1)
+            if c:
+                stats_ws.update(f"A{c.row}:E{c.row}",
+                                [[str(user_id), username, lang, new_count, now]])
+            else:
+                stats_ws.append_row([str(user_id), username, lang, new_count, now])
+        except Exception as e:
+            logger.warning(f"Stats update failed: {e}")
+
+        return new_count
+
     try:
-        username = ws.cell(row, 2).value or ""
-        lang = ws.cell(row, 4).value or ""
-        stats_ws = get_worksheet("Stats")
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        c = _find_cell(stats_ws, str(user_id), in_column=1)
-        if c:
-            stats_ws.update(f"A{c.row}:E{c.row}", [[str(user_id), username, lang, new_count, now]])
-        else:
-            stats_ws.append_row([str(user_id), username, lang, new_count, now])
+        return _with_retry(_do_increment)
     except Exception as e:
-        logger.warning(f"Stats update failed: {e}")
-
-    return new_count
+        logger.error(f"increment_invite_count failed for {user_id} after all retries: {e}")
+        return 0
 
 
 # ─── Joins (fraud prevention) ─────────────────────────────────────────────────
