@@ -34,7 +34,7 @@ ACTIVE_LANG = "en"
 # Maximum number of people who can get an invite link
 # Once this limit is reached, new users will be told the campaign is full
 # Set to 0 for unlimited
-MAX_INVITERS = 51
+MAX_INVITERS = 50
 
 # ─── ALT ACCOUNT PROTECTION ──────────────────────────────────
 # True  → block accounts with no profile photo (likely fake/alt accounts)
@@ -48,12 +48,21 @@ CHECK_ACCOUNT_AGE = True
 
 # Minimum account age in hours required to count as a valid invite
 # Accounts younger than this will be ignored and the inviter notified
-MIN_ACCOUNT_AGE_HOURS = 24
+MIN_ACCOUNT_AGE_HOURS = 168  # 7 days recommended
+
+# ─── INVITE HOLD PERIOD ──────────────────────────────────────
+# How many hours to wait before confirming an invite as valid.
+# During this period the invited user must ALSO start the bot.
+# After the hold period the bot checks:
+#   1. Did the invited user start the bot? (/start)
+#   2. Are they still in the channel?
+# Only if BOTH are true does the invite get counted.
+INVITE_HOLD_HOURS = 24
 
 # ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
-    "en": -1002464292560,
-    "it": -1003255978169,
+    "en": -1002326259934,
+    "it": -1003220500138,
     "fr": -1003471986771,
     "mx": -1003765666609,
 }
@@ -97,21 +106,20 @@ def get_channel(lang: str) -> int:
 # Format: (minimum_invites, tier_display_name, promo_code)
 #
 #   tier_display_name → shown to the user in notification & /status messages
-#                       (e.g. "🥉 30 Free Spins", "🥈 50 Free Spins")
+#                       (e.g. "🥉 30 Free Spins")
 #
 #   promo_code        → the actual code the user receives when they /claim
-#                       (e.g. "ROLL30FS", "ROLL50FS")
+#                       (e.g. "ROLL30FS")
 #
-# Replace the placeholder codes on the right with your real promo codes.
 PROMO_TIERS = [
-    (1,   "🥉 30 Free Spins",   "AJDIWW"),
-    (6,   "🥈 50 Free Spins",   "PPEKCD"),
-    (11,  "🥇 100 Free Spins",  "IIKLDS"),
-    (31,  "💎 200 Free Spins",  "LSPWPP"),
-    (71,  "🏆 300 Free Spins",  "MMDOWE"),
-    (100, "👑 500 Free Spins",  "QQKLOE"),
+    (1,   "🥉 30 Free Spins",   "ROLL30FS"),
+    (6,   "🥈 50 Free Spins",   "ROLL50FS"),
+    (11,  "🥇 100 Free Spins",  "ROLL100FS"),
+    (31,  "💎 200 Free Spins",  "ROLL200FS"),
+    (71,  "🏆 300 Free Spins",  "ROLL300FS"),
+    (100, "👑 500 Free Spins",  "ROLL500FS"),
 ]
 
 # ─── General settings ────────────────────────────────────────
-CLAIM_DEADLINE = "April 6, 2026"
+CLAIM_DEADLINE = "April 30, 2026"
 BRAND_NAME = "Rolletto"  # ← change to your brand name
