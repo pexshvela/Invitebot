@@ -3,7 +3,7 @@
 #  Uses HTML tags: <b>bold</b>  <code>monospace</code>
 # ============================================================
 
-from config import CLAIM_DEADLINE, BRAND_NAME
+from config import CLAIM_DEADLINE, BRAND_NAME, INVITE_HOLD_HOURS
 
 MESSAGES = {
     "en": {
@@ -37,6 +37,11 @@ MESSAGES = {
             "• 31 to 70 invites → 🎰 200 Free Spins\n"
             "• 71 to 100 invites → 🎰 300 Free Spins\n"
             "• 100+ invites → 🎰 500 Free Spins\n\n"
+            "⚠️ <b>Important — How invites are counted:</b>\n"
+            f"• The person you invite must <b>start this bot</b> (send /start)\n"
+            f"• They must <b>stay in the channel</b> for at least <b>{INVITE_HOLD_HOURS} hours</b>\n"
+            "• Only then will the invite be confirmed and counted ✅\n"
+            "• Invites from fake or very new accounts are not counted\n\n"
             "Start inviting now and climb the rewards ladder 🔥\n\n"
             "📊 Check your progress: /status\n"
             "🎁 Claim your reward: /claim\n"
@@ -47,6 +52,13 @@ MESSAGES = {
             "Your link: {link}\n\n"
             "📊 Check your progress: /status\n"
             "🎁 Claim your reward: /claim"
+        ),
+        "first_join_reminder": (
+            "🎉 <b>Someone just joined using your link!</b>\n\n"
+            "Remember — the invite will only be confirmed and counted after:\n\n"
+            f"✅ They start this bot (send /start)\n"
+            f"✅ They stay in the channel for <b>{INVITE_HOLD_HOURS} hours</b>\n\n"
+            "Keep sharing your link to invite more people! 🔗"
         ),
         "alt_account_blocked": (
             "⚠️ <b>We could not verify your account.</b>\n\n"
@@ -103,8 +115,7 @@ MESSAGES = {
             f"🏆 Invite challenge ends: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Sorry, I couldn't create your invite link right now. Please try again in a moment.",
-        "claim_start_dm_first": "👋 To claim your reward privately, you need to start a conversation with the bot first. Click here → @rollettoinvitechallengebot and press <b>Start</b>, then send /claim again.",
-        "select_language": (
+        "select_language_prompt": (
             "Please choose your language / Scegli la lingua / "
             "Choisissez votre langue / Elige tu idioma:"
         ),
@@ -141,17 +152,28 @@ MESSAGES = {
             "• Da 31 a 70 inviti → 🎰 200 Free Spin\n"
             "• Da 71 a 100 inviti → 🎰 300 Free Spin\n"
             "• 100+ inviti → 🎰 500 Free Spin\n\n"
+            "⚠️ <b>Importante — Come vengono contati gli inviti:</b>\n"
+            f"• La persona invitata deve <b>avviare questo bot</b> (inviare /start)\n"
+            f"• Deve <b>rimanere nel canale</b> per almeno <b>{INVITE_HOLD_HOURS} ore</b>\n"
+            "• Solo allora l'invito sarà confermato e conteggiato ✅\n"
+            "• Gli inviti da account falsi o molto nuovi non vengono contati\n\n"
             "Inizia ora a invitare e scala la classifica dei premi 🔥\n\n"
             "📊 Controlla i progressi: /status\n"
             "🎁 Riscatta il premio: /claim\n"
-            "❓ Aiuto: /help\n\n"
-            "Per ottenere il tuo link invia la parola <b>\"invita\"</b>"
+            "❓ Aiuto: /help"
         ),
         "already_has_link": (
             "Ciao {first_name} 👋 Hai già un link di invito! 🔗\n\n"
             "Il tuo link: {link}\n\n"
             "📊 Controlla i progressi: /status\n"
             "🎁 Riscatta il premio: /claim"
+        ),
+        "first_join_reminder": (
+            "🎉 <b>Qualcuno si è appena unito usando il tuo link!</b>\n\n"
+            "Ricorda — l'invito sarà confermato e conteggiato solo dopo:\n\n"
+            f"✅ Avviano questo bot (inviano /start)\n"
+            f"✅ Rimangono nel canale per <b>{INVITE_HOLD_HOURS} ore</b>\n\n"
+            "Continua a condividere il tuo link per invitare altre persone! 🔗"
         ),
         "alt_account_blocked": (
             "⚠️ <b>Non è stato possibile verificare il tuo account.</b>\n\n"
@@ -208,8 +230,7 @@ MESSAGES = {
             f"🏆 La sfida termina: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Spiacenti, non è stato possibile creare il tuo link. Riprova tra un momento.",
-        "claim_start_dm_first": "👋 Per riscattare il tuo premio in privato, devi prima avviare una conversazione con il bot. Clicca qui → @rollettoinvitechallengebot e premi <b>Start</b>, poi invia di nuovo /claim.",
-        "select_language": "Scegli la tua lingua:",
+        "select_language_prompt": "Scegli la tua lingua:",
     },
 
     "fr": {
@@ -243,17 +264,28 @@ MESSAGES = {
             "• 31 à 70 invitations → 🎰 200 Tours Gratuits\n"
             "• 71 à 100 invitations → 🎰 300 Tours Gratuits\n"
             "• 100+ invitations → 🎰 500 Tours Gratuits\n\n"
+            "⚠️ <b>Important — Comment les invitations sont comptées:</b>\n"
+            f"• La personne invitée doit <b>démarrer ce bot</b> (envoyer /start)\n"
+            f"• Elle doit <b>rester dans le canal</b> pendant au moins <b>{INVITE_HOLD_HOURS} heures</b>\n"
+            "• Seulement alors l'invitation sera confirmée et comptée ✅\n"
+            "• Les invitations de faux comptes ou de comptes très récents ne sont pas comptées\n\n"
             "Commencez à inviter maintenant et grimpez l'échelle des récompenses 🔥\n\n"
             "📊 Vérifiez vos progrès: /status\n"
             "🎁 Réclamez votre récompense: /claim\n"
-            "❓ Aide: /help\n\n"
-            "Pour obtenir votre lien envoyez le mot <b>\"inviter\"</b>"
+            "❓ Aide: /help"
         ),
         "already_has_link": (
             "Bonjour {first_name} 👋 Vous avez déjà un lien d'invitation! 🔗\n\n"
             "Votre lien: {link}\n\n"
             "📊 Vérifiez vos progrès: /status\n"
             "🎁 Réclamez votre récompense: /claim"
+        ),
+        "first_join_reminder": (
+            "🎉 <b>Quelqu'un vient de rejoindre via votre lien!</b>\n\n"
+            "Rappel — l'invitation ne sera confirmée et comptée qu'après:\n\n"
+            f"✅ Ils démarrent ce bot (envoient /start)\n"
+            f"✅ Ils restent dans le canal pendant <b>{INVITE_HOLD_HOURS} heures</b>\n\n"
+            "Continuez à partager votre lien pour inviter plus de personnes! 🔗"
         ),
         "alt_account_blocked": (
             "⚠️ <b>Nous n'avons pas pu vérifier votre compte.</b>\n\n"
@@ -310,8 +342,7 @@ MESSAGES = {
             f"🏆 Le défi se termine: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Désolé, je n'ai pas pu créer votre lien. Veuillez réessayer dans un moment.",
-        "claim_start_dm_first": "👋 Pour réclamer votre récompense en privé, vous devez d'abord démarrer une conversation avec le bot. Cliquez ici → @rollettoinvitechallengebot et appuyez sur <b>Start</b>, puis envoyez à nouveau /claim.",
-        "select_language": "Choisissez votre langue:",
+        "select_language_prompt": "Choisissez votre langue:",
     },
 
     "mx": {
@@ -345,17 +376,28 @@ MESSAGES = {
             "• 31 a 70 invitaciones → 🎰 200 Giros Gratis\n"
             "• 71 a 100 invitaciones → 🎰 300 Giros Gratis\n"
             "• 100+ invitaciones → 🎰 500 Giros Gratis\n\n"
+            "⚠️ <b>Importante — Cómo se cuentan las invitaciones:</b>\n"
+            f"• La persona invitada debe <b>iniciar este bot</b> (enviar /start)\n"
+            f"• Debe <b>permanecer en el canal</b> por al menos <b>{INVITE_HOLD_HOURS} horas</b>\n"
+            "• Solo entonces la invitación será confirmada y contada ✅\n"
+            "• Las invitaciones de cuentas falsas o muy nuevas no se cuentan\n\n"
             "Empieza a invitar ahora y sube la escalera de recompensas 🔥\n\n"
             "📊 Revisa tu progreso: /status\n"
             "🎁 Reclama tu recompensa: /claim\n"
-            "❓ Ayuda: /help\n\n"
-            "Para obtener tu enlace envía la palabra <b>\"invitar\"</b>"
+            "❓ Ayuda: /help"
         ),
         "already_has_link": (
             "Hola {first_name} 👋 Ya tienes un enlace de invitación! 🔗\n\n"
             "Tu enlace: {link}\n\n"
             "📊 Revisa tu progreso: /status\n"
             "🎁 Reclama tu recompensa: /claim"
+        ),
+        "first_join_reminder": (
+            "🎉 <b>¡Alguien acaba de unirse usando tu enlace!</b>\n\n"
+            "Recuerda — la invitación solo será confirmada y contada después de:\n\n"
+            f"✅ Que inicien este bot (envíen /start)\n"
+            f"✅ Que permanezcan en el canal por <b>{INVITE_HOLD_HOURS} horas</b>\n\n"
+            "Sigue compartiendo tu enlace para invitar a más personas! 🔗"
         ),
         "alt_account_blocked": (
             "⚠️ <b>No pudimos verificar tu cuenta.</b>\n\n"
@@ -412,7 +454,6 @@ MESSAGES = {
             f"🏆 El desafío termina: <b>{CLAIM_DEADLINE}</b>"
         ),
         "invite_link_failed": "❌ Lo siento, no pude crear tu enlace ahora mismo. Por favor intenta de nuevo en un momento.",
-        "claim_start_dm_first": "👋 Para reclamar tu recompensa en privado, primero debes iniciar una conversación con el bot. Haz clic aquí → @rollettoinvitechallengebot y presiona <b>Start</b>, luego envía /claim de nuevo.",
-        "select_language": "Elige tu idioma:",
+        "select_language_prompt": "Elige tu idioma:",
     },
 }
