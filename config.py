@@ -61,7 +61,7 @@ INVITE_HOLD_HOURS = 24
 
 # ─── Channel IDs per language (used when TEST_MODE = False) ──
 CHANNELS = {
-    "en": -1002326259934,
+    "en": -1002464292560,
     "it": -1003220500138,
     "fr": -1003471986771,
     "mx": -1003765666609,
