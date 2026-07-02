@@ -35,7 +35,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# ADMIN_ID accepts one ID or a comma-separated list, e.g. "111111,222222"
+ADMIN_IDS = {int(x.strip()) for x in os.getenv("ADMIN_ID", "").split(",") if x.strip()}
 
 WARNING_DELAY_HOURS = 24
 REMOVAL_DELAY_HOURS = 24
@@ -614,7 +615,7 @@ async def track_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── Admin ────────────────────────────────────────────────────────────────────
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id not in ADMIN_IDS:
         return
     try:
         members = sheets.get_worksheet("Members").get_all_values()
@@ -641,7 +642,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id not in ADMIN_IDS:
         return
     await update.message.reply_text(
         "⚠️ <b>WARNING — Full Reset</b>\n\n"
@@ -659,12 +660,12 @@ async def admin_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id not in ADMIN_IDS:
         return
     await update.message.reply_text("🔄 Resetting all data, please wait...")
     try:
         sheets.reset_all_data()
-        logger.info(f"Full reset performed by admin {ADMIN_ID}")
+        logger.info(f"Full reset performed by admin {update.effective_user.id}")
         await update.message.reply_text(
             "✅ <b>Reset complete!</b>\n\n"
             "All sheets have been wiped and are ready for a new campaign.\n\n"
