@@ -112,14 +112,14 @@ def get_channel(lang: str) -> int:
 #                       (e.g. "ROLL30FS")
 #
 PROMO_TIERS = [
-    (1,   "🥉 30 Free Spins",   "AJDIWW"),
-    (6,   "🥈 50 Free Spins",   "PPEKCD"),
-    (11,  "🥇 100 Free Spins",  "IIKLDS"),
-    (31,  "💎 200 Free Spins",  "LSPWPP"),
-    (71,  "🏆 300 Free Spins",  "MMDOWE"),
-    (100, "👑 500 Free Spins",  "QQKLOE"),
+    (1,   "🥉 5$ free bet ",   "RT19A"),
+    (6,   "🥈 7$ free bet ",   "RT27C"),
+    (11,  "🥇 10$ free bet",  "RT34F"),
+    (31,  "💎 20$ free bet",  "RT58K"),
+    (71,  "🏆 30$ free bet",  "RT71M"),
+    (100, "👑 50$ free bet",  "RT99Z"),
 ]
 
 # ─── General settings ────────────────────────────────────────
-CLAIM_DEADLINE = "April 14, 2026"
+CLAIM_DEADLINE = "july 26, 2026"
 BRAND_NAME = "Rolletto"  # ← change to your brand name
