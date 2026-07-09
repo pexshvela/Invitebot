@@ -12,7 +12,7 @@ TEST_CHANNEL_ID = -1002916936846  # ← your test channel ID
 # ─── CAMPAIGN STATUS ─────────────────────────────────────────
 # True  → campaign is running normally
 # False → bot tells everyone the campaign has ended
-CAMPAIGN_ACTIVE = True
+CAMPAIGN_ACTIVE = False
 
 # ─── ACTIVE LANGUAGE / MARKET ────────────────────────────────
 # Controls which language market(s) are active. Three options:
