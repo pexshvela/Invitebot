@@ -121,5 +121,5 @@ PROMO_TIERS = [
 ]
 
 # ─── General settings ────────────────────────────────────────
-CLAIM_DEADLINE = "july 26, 2026"
+CLAIM_DEADLINE = "july 9, 2026"
 BRAND_NAME = "Rolletto"  # ← change to your brand name
